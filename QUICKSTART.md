@@ -1,6 +1,31 @@
-# Quickstart — Go Live in ~5 Minutes
+# Quickstart
 
-The app is fully built. These are the only steps left, and they need your accounts.
+The app is fully built **and runs with zero credentials.**
+
+## Run it right now (no accounts, no keys)
+
+```bash
+npm run dev
+```
+
+Then seed it with real Austin events and open the site:
+
+```bash
+curl -X POST http://localhost:3000/api/ingest   # scans sources + tags events
+open http://localhost:3000
+```
+
+With no Supabase configured, the app uses an embedded in-memory Postgres
+(PGlite) and a built-in seed of real Austin venues, so search, category
+filters, event detail pages, subscriptions, and featured listings all work
+immediately. Event tagging uses keyword matching (no Gemini key needed).
+Re-run the `curl` after a restart to re-seed.
+
+---
+
+## Going to production (your accounts)
+
+For a real deployment with a persistent database and live email, do the below.
 
 ## 1. Create the database (required)
 

@@ -1,8 +1,8 @@
 import { Resend } from 'resend'
-import { createClient } from '@supabase/supabase-js'
 import type { Event, Category } from '@/lib/supabase/types'
+import { listSubscriptions, getEventsBetween } from '@/lib/db'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
 
 type EventWithCats = Event & { categories?: Category[] }
 
@@ -42,49 +42,28 @@ function buildDigestHtml(events: EventWithCats[], unsubscribeUrl: string, dateLa
 }
 
 export async function sendDailyDigests() {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-
   const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'
 
-  const { data: subs } = await supabase
-    .from('subscriptions')
-    .select('*')
-    .eq('frequency', 'daily')
-
-  if (!subs?.length) return { sent: 0 }
+  const subs = await listSubscriptions('daily')
+  if (!subs.length) return { sent: 0 }
 
   const today = new Date()
   const tomorrow = new Date(today.getTime() + 86400000)
 
-  const { data: allEvents } = await supabase
-    .from('events')
-    .select(`*, event_categories(categories(id,slug,name,color))`)
-    .gte('start_time', today.toISOString())
-    .lte('start_time', tomorrow.toISOString())
-    .order('start_time', { ascending: true })
-
-  type RawEventRow = Record<string, unknown> & { event_categories?: { categories: Category }[] }
-  const events: EventWithCats[] = (allEvents ?? []).map((e: RawEventRow) => {
-    const { event_categories, ...rest } = e
-    return {
-      ...(rest as unknown as Event),
-      categories: (event_categories ?? []).map(ec => ec.categories).filter(Boolean),
-    }
-  })
+  const rawEvents = await getEventsBetween(today.toISOString(), tomorrow.toISOString())
+  const events: EventWithCats[] = rawEvents.map(e => e as unknown as EventWithCats)
 
   const dateLabel = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
   let sent = 0
 
   for (const sub of subs) {
-    const filtered = (sub.category_slugs as string[])?.length
-      ? events.filter(e => e.categories?.some(c => (sub.category_slugs as string[]).includes(c.slug)))
+    const filtered = sub.category_slugs?.length
+      ? events.filter(e => e.categories?.some(c => sub.category_slugs.includes(c.slug)))
       : events
 
     const unsubscribeUrl = `${baseUrl}/api/unsubscribe?token=${sub.token}`
 
+    if (!resend) { console.log(`[digest] would send to ${sub.email} (${filtered.length} events) — no RESEND_API_KEY`); continue }
     try {
       await resend.emails.send({
         from: 'What It Do Austin <onboarding@resend.dev>',

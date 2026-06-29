@@ -1,17 +1,14 @@
 import { notFound } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { getEvent as fetchEvent } from '@/lib/db'
 import type { Event, Category } from '@/lib/supabase/types'
 
-async function getEvent(id: string): Promise<(Event & { categories?: Category[] }) | null> {
-  const baseUrl = process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : 'http://localhost:3000'
+export const dynamic = 'force-dynamic'
 
+async function getEvent(id: string): Promise<(Event & { categories?: Category[] }) | null> {
   try {
-    const res = await fetch(`${baseUrl}/api/events/${id}`, { cache: 'no-store' })
-    if (!res.ok) return null
-    return res.json()
+    return (await fetchEvent(id)) as unknown as (Event & { categories?: Category[] }) | null
   } catch {
     return null
   }

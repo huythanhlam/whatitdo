@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 import { CATEGORY_SLUGS } from '@/lib/categories'
+import { addSubscription } from '@/lib/db'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
@@ -15,27 +15,17 @@ export async function POST(req: NextRequest) {
 
   const validSlugs = category_slugs.filter((s: string) => (CATEGORY_SLUGS as string[]).includes(s))
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-
-  const { data, error } = await supabase
-    .from('subscriptions')
-    .upsert({ email, frequency, category_slugs: validSlugs }, { onConflict: 'email' })
-    .select('token')
-    .single()
-
-  if (error || !data) {
+  const token = await addSubscription({ email, frequency, category_slugs: validSlugs })
+  if (!token) {
     return NextResponse.json({ error: 'Could not save subscription' }, { status: 500 })
   }
 
   const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'
-  const unsubscribeUrl = `${baseUrl}/api/unsubscribe?token=${data.token}`
+  const unsubscribeUrl = `${baseUrl}/api/unsubscribe?token=${token}`
   const categoryLabel = validSlugs.length ? validSlugs.join(', ') : 'all categories'
 
   try {
-    await resend.emails.send({
+    await resend?.emails.send({
       from: 'What It Do Austin <onboarding@resend.dev>',
       to: email,
       subject: 'You\'re subscribed to Austin events!',

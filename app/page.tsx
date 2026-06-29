@@ -2,29 +2,21 @@ import { Suspense } from 'react'
 import { SearchBar } from '@/components/SearchBar'
 import { SidebarFilters } from '@/components/SidebarFilters'
 import { EventGrid } from '@/components/EventGrid'
+import { listEvents } from '@/lib/db'
 import type { Event, Category } from '@/lib/supabase/types'
 
 type EnrichedEvent = Event & { categories?: Category[]; is_featured?: boolean; featured_label?: string | null }
 
+export const dynamic = 'force-dynamic'
+
 async function EventsLoader({ searchParams }: { searchParams: Record<string, string | string[]> }) {
-  const baseUrl = process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : 'http://localhost:3000'
-
-  const url = new URL(`${baseUrl}/api/events`)
-  const q = searchParams.q
-  if (q) url.searchParams.set('q', typeof q === 'string' ? q : q[0])
-
+  const q = typeof searchParams.q === 'string' ? searchParams.q : Array.isArray(searchParams.q) ? searchParams.q[0] : ''
   const cats = searchParams.category
-  if (cats) {
-    const arr = typeof cats === 'string' ? [cats] : cats
-    arr.forEach(c => url.searchParams.append('category', c))
-  }
+  const categories = cats ? (typeof cats === 'string' ? [cats] : cats) : []
 
   try {
-    const res = await fetch(url.toString(), { cache: 'no-store' })
-    const { events } = await res.json() as { events: EnrichedEvent[] }
-    return <EventGrid events={events ?? []} />
+    const events = await listEvents({ q, categories, limit: 24, offset: 0 })
+    return <EventGrid events={events as unknown as EnrichedEvent[]} />
   } catch {
     return <EventGrid events={[]} />
   }
