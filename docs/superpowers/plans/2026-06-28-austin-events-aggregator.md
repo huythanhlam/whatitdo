@@ -6,7 +6,7 @@
 
 **Architecture:** Next.js 15 App Router frontend + API routes deployed on Vercel; Supabase for Postgres, Auth, and storage; Vercel Cron triggers daily scraping jobs that call internal API routes to ingest events; Claude Haiku tags events; Resend sends subscription digests.
 
-**Tech Stack:** Next.js 15, Supabase (Postgres + Auth), Tailwind CSS, shadcn/ui, Cheerio (scraping), node-ical (iCal), @anthropic-ai/sdk (tagging), Resend (email), Vercel Cron, TypeScript
+**Tech Stack:** Next.js 15, Supabase (Postgres + Auth), Tailwind CSS, shadcn/ui, Cheerio (scraping), iCal parser, @google/genai (Gemini 2.5 Flash tagging), Resend (email), Vercel Cron, TypeScript
 
 ---
 
