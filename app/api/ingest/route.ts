@@ -47,20 +47,37 @@ export async function POST(req: NextRequest) {
   let inserted = 0
   let skipped = 0
 
-  for (const raw of allEvents) {
+  // Process events with bounded concurrency — hundreds of events tagged one at a
+  // time would blow the function timeout. CONCURRENCY workers drain the queue.
+  const CONCURRENCY = 8
+  let cursor = 0
+
+  async function processOne(raw: (typeof allEvents)[number]) {
     // Tag first so the image fallback can pick a category-themed image, then
     // guarantee every event has an image before storing it.
     const slugs = await tagEvent(raw.title, raw.description)
     if (!raw.image_url) raw.image_url = imageForCategories(slugs)
 
     const eventId = await upsertEvent(raw)
-    if (!eventId) { skipped++; continue }
+    if (!eventId) { skipped++; return }
 
     const categoryIds = slugs.map(s => categoryIdBySlug[s]).filter(Boolean)
     await setEventCategories(eventId, categoryIds)
-
     inserted++
   }
+
+  async function worker() {
+    while (cursor < allEvents.length) {
+      const raw = allEvents[cursor++]
+      try {
+        await processOne(raw)
+      } catch {
+        skipped++
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker))
 
   return NextResponse.json({ inserted, skipped, total: allEvents.length, mode: isLocal() ? 'local' : 'supabase' })
 }
