@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { FeaturedBadge } from './FeaturedBadge'
+import { getTicketProvider } from '@/lib/tickets'
 import type { Event, Category } from '@/lib/supabase/types'
 
 type Props = {
@@ -21,11 +22,19 @@ export function EventCard({ event, featured = false, featuredLabel }: Props) {
     ? `$${event.price_min}${event.price_max && event.price_max !== event.price_min ? `–$${event.price_max}` : ''}`
     : null
 
-  return (
-    <Link href={`/events/${event.id}`} className="block group h-full">
-      <Card className={`relative overflow-hidden h-full transition-all hover:shadow-lg hover:-translate-y-0.5 ${featured ? 'ring-2 ring-violet-400 shadow-violet-100' : ''}`}>
-        {featured && <FeaturedBadge label={featuredLabel} />}
+  const provider = getTicketProvider(event.ticket_url)
+  // Paid events get a buy CTA; free events with a link get an RSVP/details CTA.
+  const ticketCta = provider
+    ? event.is_free
+      ? 'RSVP / Details'
+      : provider.cta
+    : null
 
+  return (
+    <Card className={`relative overflow-hidden h-full flex flex-col transition-all hover:shadow-lg hover:-translate-y-0.5 ${featured ? 'ring-2 ring-violet-400 shadow-violet-100' : ''}`}>
+      {featured && <FeaturedBadge label={featuredLabel} />}
+
+      <Link href={`/events/${event.id}`} className="block group flex-1">
         {event.image_url ? (
           <div className="h-44 overflow-hidden bg-slate-100">
             <img
@@ -74,7 +83,19 @@ export function EventCard({ event, featured = false, featuredLabel }: Props) {
             ))}
           </div>
         </CardContent>
-      </Card>
-    </Link>
+      </Link>
+
+      {ticketCta && event.ticket_url && (
+        <a
+          href={event.ticket_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={provider && provider.name !== 'venue site' ? `Opens ${provider.name}` : 'Opens the ticket page'}
+          className="mx-4 mb-4 inline-flex items-center justify-center gap-1.5 rounded-md bg-violet-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-violet-700"
+        >
+          🎟 {ticketCta} →
+        </a>
+      )}
+    </Card>
   )
 }

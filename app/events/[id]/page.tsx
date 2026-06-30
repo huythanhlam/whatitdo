@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { getEvent as fetchEvent } from '@/lib/db'
+import { getTicketProvider } from '@/lib/tickets'
 import type { Event, Category } from '@/lib/supabase/types'
 
 export const dynamic = 'force-dynamic'
@@ -26,6 +27,8 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
   })
   const timeStr = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
   const priceLabel = event.is_free ? 'Free' : event.price_min ? `From $${event.price_min}` : 'See tickets for pricing'
+  const provider = getTicketProvider(event.ticket_url)
+  const ticketCta = provider ? (event.is_free ? 'RSVP / Details' : provider.cta) : null
 
   return (
     <div className="min-h-screen bg-background">
@@ -74,10 +77,10 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
         )}
 
         <div className="flex gap-3 flex-wrap">
-          {event.ticket_url && (
+          {event.ticket_url && ticketCta && (
             <Button asChild className="bg-violet-600 hover:bg-violet-700">
               <a href={event.ticket_url} target="_blank" rel="noopener noreferrer">
-                Get Tickets →
+                🎟 {ticketCta} →
               </a>
             </Button>
           )}
@@ -85,6 +88,9 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
             <a href="/subscribe">🔔 Get event alerts</a>
           </Button>
         </div>
+        {event.ticket_url && provider && provider.name !== 'venue site' && (
+          <p className="mt-2 text-xs text-slate-400">Tickets provided by {provider.name}</p>
+        )}
       </div>
     </div>
   )
