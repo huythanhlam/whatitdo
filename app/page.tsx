@@ -1,7 +1,7 @@
 import { Suspense } from 'react'
 import { SearchBar } from '@/components/SearchBar'
 import { SidebarFilters } from '@/components/SidebarFilters'
-import { EventGrid } from '@/components/EventGrid'
+import { EventList } from '@/components/EventList'
 import { listEvents } from '@/lib/db'
 import { resolveDateRange } from '@/lib/dateRanges'
 import { DateFilter } from '@/components/DateFilter'
@@ -42,9 +42,18 @@ async function EventsLoader({ searchParams }: { searchParams: Record<string, str
         </div>
       )
     }
-    return <EventGrid events={events as unknown as EnrichedEvent[]} />
+
+    // Build the filter query string (sans page) so Load More keeps the filters.
+    const qs = new URLSearchParams()
+    if (q) qs.set('q', q)
+    categories.forEach(c => qs.append('category', c))
+    const when = first(searchParams.when); if (when) qs.set('when', when)
+    const fromP = first(searchParams.from); if (fromP) qs.set('from', fromP)
+    const toP = first(searchParams.to); if (toP) qs.set('to', toP)
+
+    return <EventList initialEvents={events as unknown as EnrichedEvent[]} query={qs.toString()} />
   } catch {
-    return <EventGrid events={[]} />
+    return <EventList initialEvents={[]} query="" />
   }
 }
 
