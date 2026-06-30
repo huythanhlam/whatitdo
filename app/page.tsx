@@ -2,6 +2,8 @@ import { Suspense } from 'react'
 import { SearchBar } from '@/components/SearchBar'
 import { SidebarFilters } from '@/components/SidebarFilters'
 import { EventList } from '@/components/EventList'
+import { CalendarView } from '@/components/CalendarView'
+import { ViewToggle } from '@/components/ViewToggle'
 import { listEvents, countEvents } from '@/lib/db'
 import { resolveDateRange } from '@/lib/dateRanges'
 import { DateFilter } from '@/components/DateFilter'
@@ -60,6 +62,7 @@ export default async function HomePage({
   searchParams: Promise<Record<string, string | string[]>>
 }) {
   const params = await searchParams
+  const view = first(params.view) === 'calendar' ? 'calendar' : 'grid'
 
   return (
     <div className="min-h-screen bg-background">
@@ -90,27 +93,40 @@ export default async function HomePage({
         </div>
 
         <main className="flex-1 min-w-0">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between gap-3 mb-4">
             <h1 className="text-lg font-semibold text-slate-800">Austin Events</h1>
+            <Suspense fallback={<div className="h-9 w-32 bg-slate-100 rounded-lg animate-pulse" />}>
+              <ViewToggle />
+            </Suspense>
           </div>
-          <Suspense fallback={<div className="h-9 bg-slate-100 rounded-md animate-pulse mb-5" />}>
-            <DateFilter />
-          </Suspense>
+
           {/* Category filters on mobile (sidebar is hidden < md) */}
           <div className="md:hidden mb-5">
             <Suspense>
               <SidebarFilters compact />
             </Suspense>
           </div>
-          <Suspense fallback={
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {Array(6).fill(0).map((_, i) => (
-                <div key={i} className="h-64 bg-slate-100 rounded-xl animate-pulse" />
-              ))}
-            </div>
-          }>
-            <EventsLoader searchParams={params} />
-          </Suspense>
+
+          {view === 'calendar' ? (
+            <Suspense fallback={<div className="h-96 bg-slate-100 rounded-lg animate-pulse" />}>
+              <CalendarView />
+            </Suspense>
+          ) : (
+            <>
+              <Suspense fallback={<div className="h-9 bg-slate-100 rounded-md animate-pulse mb-5" />}>
+                <DateFilter />
+              </Suspense>
+              <Suspense fallback={
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {Array(6).fill(0).map((_, i) => (
+                    <div key={i} className="h-64 bg-slate-100 rounded-xl animate-pulse" />
+                  ))}
+                </div>
+              }>
+                <EventsLoader searchParams={params} />
+              </Suspense>
+            </>
+          )}
         </main>
       </div>
     </div>

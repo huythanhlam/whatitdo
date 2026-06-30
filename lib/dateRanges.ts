@@ -2,7 +2,7 @@
 // Resolves a named range ("today", "week", "weekend", "month") or a custom
 // from/to pair into absolute UTC ISO bounds the data layer can query.
 
-const TZ = 'America/Chicago'
+export const TZ = 'America/Chicago'
 
 export type WhenPreset = 'today' | 'week' | 'weekend' | 'month'
 export const WHEN_PRESETS: { value: WhenPreset; label: string }[] = [
@@ -25,14 +25,14 @@ function tzOffsetMs(tz: string, date: Date): number {
 }
 
 // Convert a wall-clock time in `tz` to the corresponding UTC instant.
-function zonedToUtc(y: number, m: number, d: number, hh: number, mm: number, ss: number, tz: string): Date {
+export function zonedToUtc(y: number, m: number, d: number, hh: number, mm: number, ss: number, tz: string): Date {
   const asUTC = Date.UTC(y, m, d, hh, mm, ss)
   const guess = new Date(asUTC)
   return new Date(asUTC - tzOffsetMs(tz, guess))
 }
 
 // The Y/M/D and weekday (0=Sun) of `date` in the target timezone.
-function partsInTz(date: Date, tz: string) {
+export function partsInTz(date: Date, tz: string) {
   const dtf = new Intl.DateTimeFormat('en-US', {
     timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short',
   })
