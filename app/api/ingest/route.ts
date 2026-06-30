@@ -3,8 +3,11 @@ import { fetchEventbriteEvents } from '@/lib/scrapers/eventbrite'
 import { fetchAustinChronicleEvents } from '@/lib/scrapers/austin-chronicle'
 import { fetchDo512Events } from '@/lib/scrapers/do512'
 import { fetchIcalEvents } from '@/lib/scrapers/ical'
+import { fetchTicketmasterEvents } from '@/lib/scrapers/ticketmaster'
+import { fetchSeatGeekEvents } from '@/lib/scrapers/seatgeek'
 import { fetchSeedEvents } from '@/lib/scrapers/seed'
 import { tagEvent } from '@/lib/tagger'
+import { imageForCategories } from '@/lib/images'
 import { getCategoryIdBySlug, upsertEvent, setEventCategories, isLocal } from '@/lib/db'
 
 export const maxDuration = 300
@@ -21,11 +24,13 @@ export async function POST(req: NextRequest) {
 
   const categoryIdBySlug = await getCategoryIdBySlug()
 
-  const [eventbrite, chronicle, do512, icalResult, seed] = await Promise.allSettled([
+  const [eventbrite, chronicle, do512, icalResult, ticketmaster, seatgeek, seed] = await Promise.allSettled([
     fetchEventbriteEvents(),
     fetchAustinChronicleEvents(),
     fetchDo512Events(),
     fetchIcalEvents(),
+    fetchTicketmasterEvents(),
+    fetchSeatGeekEvents(),
     fetchSeedEvents(),
   ])
 
@@ -34,6 +39,8 @@ export async function POST(req: NextRequest) {
     ...(chronicle.status === 'fulfilled' ? chronicle.value : []),
     ...(do512.status === 'fulfilled' ? do512.value : []),
     ...(icalResult.status === 'fulfilled' ? icalResult.value : []),
+    ...(ticketmaster.status === 'fulfilled' ? ticketmaster.value : []),
+    ...(seatgeek.status === 'fulfilled' ? seatgeek.value : []),
     ...(seed.status === 'fulfilled' ? seed.value : []),
   ]
 
@@ -41,10 +48,14 @@ export async function POST(req: NextRequest) {
   let skipped = 0
 
   for (const raw of allEvents) {
+    // Tag first so the image fallback can pick a category-themed image, then
+    // guarantee every event has an image before storing it.
+    const slugs = await tagEvent(raw.title, raw.description)
+    if (!raw.image_url) raw.image_url = imageForCategories(slugs)
+
     const eventId = await upsertEvent(raw)
     if (!eventId) { skipped++; continue }
 
-    const slugs = await tagEvent(raw.title, raw.description)
     const categoryIds = slugs.map(s => categoryIdBySlug[s]).filter(Boolean)
     await setEventCategories(eventId, categoryIds)
 

@@ -11,6 +11,11 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: '**.eventbritecdn.com' },
       { protocol: 'https', hostname: '**.do512.com' },
       { protocol: 'https', hostname: '**.austinchronicle.com' },
+      { protocol: 'https', hostname: 's1.ticketm.net' },
+      { protocol: 'https', hostname: '**.ticketm.net' },
+      { protocol: 'https', hostname: '**.seatgeek.com' },
+      { protocol: 'https', hostname: '**.tmol.io' },
+      { protocol: 'https', hostname: 'images.unsplash.com' },
     ],
   },
 };

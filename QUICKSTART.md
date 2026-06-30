@@ -52,6 +52,8 @@ matching. Add them when you want the upgrades:
 
 - `GEMINI_API_KEY` — smarter AI tagging. Free: [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
 - `EVENTBRITE_TOKEN` — adds Eventbrite as a source. [eventbrite.com/platform/api](https://www.eventbrite.com/platform/api)
+- `TICKETMASTER_API_KEY` — image-rich live events. Free: [developer.ticketmaster.com](https://developer.ticketmaster.com)
+- `SEATGEEK_CLIENT_ID` — events with performer images. Free: [seatgeek.com/account/develop](https://seatgeek.com/account/develop)
 - `RESEND_API_KEY` — actually send the email digests. [resend.com](https://resend.com)
 - `CRON_SECRET` — any random string. Generate: `openssl rand -hex 32`
 
