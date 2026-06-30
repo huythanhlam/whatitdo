@@ -9,11 +9,11 @@ const PAGE_SIZE = 24
 
 // Renders the initial (server-fetched) page, then appends further pages from
 // /api/events on demand, preserving the active filters via `query`.
-export function EventList({ initialEvents, query }: { initialEvents: EnrichedEvent[]; query: string }) {
+export function EventList({ initialEvents, query, total }: { initialEvents: EnrichedEvent[]; query: string; total: number }) {
   const [events, setEvents] = useState<EnrichedEvent[]>(initialEvents)
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(false)
-  const [done, setDone] = useState(initialEvents.length < PAGE_SIZE)
+  const [done, setDone] = useState(initialEvents.length >= total || initialEvents.length < PAGE_SIZE)
 
   async function loadMore() {
     setLoading(true)
@@ -35,6 +35,10 @@ export function EventList({ initialEvents, query }: { initialEvents: EnrichedEve
 
   return (
     <div>
+      <p className="text-sm text-muted-foreground mb-4">
+        Showing <span className="font-medium text-slate-700">{events.length}</span> of{' '}
+        <span className="font-medium text-slate-700">{total}</span> {total === 1 ? 'event' : 'events'}
+      </p>
       <EventGrid events={events} />
       {!done && events.length > 0 && (
         <div className="flex justify-center mt-8">
@@ -43,12 +47,12 @@ export function EventList({ initialEvents, query }: { initialEvents: EnrichedEve
             disabled={loading}
             className="px-6 py-2.5 rounded-full bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50 transition-colors"
           >
-            {loading ? 'Loading…' : 'Load more events'}
+            {loading ? 'Loading…' : `Load more events (${total - events.length} more)`}
           </button>
         </div>
       )}
-      {done && events.length >= PAGE_SIZE && (
-        <p className="text-center text-sm text-muted-foreground mt-8">That&apos;s all {events.length} events.</p>
+      {done && total > PAGE_SIZE && (
+        <p className="text-center text-sm text-muted-foreground mt-8">That&apos;s all {total} events.</p>
       )}
     </div>
   )

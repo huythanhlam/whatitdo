@@ -2,7 +2,7 @@ import { Suspense } from 'react'
 import { SearchBar } from '@/components/SearchBar'
 import { SidebarFilters } from '@/components/SidebarFilters'
 import { EventList } from '@/components/EventList'
-import { listEvents } from '@/lib/db'
+import { listEvents, countEvents } from '@/lib/db'
 import { resolveDateRange } from '@/lib/dateRanges'
 import { DateFilter } from '@/components/DateFilter'
 import type { Event, Category } from '@/lib/supabase/types'
@@ -27,14 +27,11 @@ async function EventsLoader({ searchParams }: { searchParams: Record<string, str
   })
 
   try {
-    const events = await listEvents({
-      q,
-      categories,
-      from: range.fromIso,
-      to: range.toIso ?? undefined,
-      limit: 24,
-      offset: 0,
-    })
+    const filterArgs = { q, categories, from: range.fromIso, to: range.toIso ?? undefined }
+    const [events, total] = await Promise.all([
+      listEvents({ ...filterArgs, limit: 24, offset: 0 }),
+      countEvents(filterArgs),
+    ])
     if (events.length === 0) {
       return (
         <div className="text-center py-16 text-muted-foreground text-sm">
@@ -51,9 +48,9 @@ async function EventsLoader({ searchParams }: { searchParams: Record<string, str
     const fromP = first(searchParams.from); if (fromP) qs.set('from', fromP)
     const toP = first(searchParams.to); if (toP) qs.set('to', toP)
 
-    return <EventList initialEvents={events as unknown as EnrichedEvent[]} query={qs.toString()} />
+    return <EventList initialEvents={events as unknown as EnrichedEvent[]} query={qs.toString()} total={total} />
   } catch {
-    return <EventList initialEvents={[]} query="" />
+    return <EventList initialEvents={[]} query="" total={0} />
   }
 }
 

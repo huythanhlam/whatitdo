@@ -137,6 +137,52 @@ export async function listEvents(opts: {
 }
 
 // ---------------------------------------------------------------------------
+// countEvents — total matching the same filters (for "showing X of N")
+// ---------------------------------------------------------------------------
+export async function countEvents(opts: {
+  q?: string
+  categories?: string[]
+  from?: string
+  to?: string
+}): Promise<number> {
+  const nowIso = new Date().toISOString()
+  const fromIso = opts.from && opts.from > nowIso ? opts.from : nowIso
+
+  if (isLocal()) {
+    const db = await getPglite()
+    const params: unknown[] = [fromIso]
+    let where = 'e.start_time >= $1'
+    if (opts.to) { params.push(opts.to); where += ` AND e.start_time <= $${params.length}` }
+    if (opts.q) { params.push(`%${opts.q}%`); where += ` AND e.title ILIKE $${params.length}` }
+    if (opts.categories && opts.categories.length > 0) {
+      params.push(opts.categories)
+      where += ` AND e.id IN (SELECT ec.event_id FROM event_categories ec
+        JOIN categories c ON c.id = ec.category_id WHERE c.slug = ANY($${params.length}))`
+    }
+    const res = await db.query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM events e WHERE ${where}`, params)
+    return parseInt(res.rows[0]?.count ?? '0', 10)
+  }
+
+  const supabase = await createSbServer()
+  let ids: string[] | null = null
+  if (opts.categories && opts.categories.length > 0) {
+    const { data: catData } = await supabase.from('categories').select('id').in('slug', opts.categories)
+    const catIds = (catData ?? []).map(c => c.id)
+    if (catIds.length === 0) return 0
+    const { data: eventIds } = await supabase.from('event_categories').select('event_id').in('category_id', catIds)
+    ids = [...new Set((eventIds ?? []).map(r => r.event_id))]
+    if (ids.length === 0) return 0
+  }
+
+  let query = supabase.from('events').select('id', { count: 'exact', head: true }).gte('start_time', fromIso)
+  if (opts.to) query = query.lte('start_time', opts.to)
+  if (opts.q) query = query.ilike('title', `%${opts.q}%`)
+  if (ids !== null) query = query.in('id', ids)
+  const { count } = await query
+  return count ?? 0
+}
+
+// ---------------------------------------------------------------------------
 // getEvent
 // ---------------------------------------------------------------------------
 export async function getEvent(id: string): Promise<EnrichedEvent | null> {
