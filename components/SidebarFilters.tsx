@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { CATEGORIES } from '@/lib/categories'
 
-export function SidebarFilters() {
+export function SidebarFilters({ compact = false }: { compact?: boolean }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const selected = searchParams.getAll('category')
@@ -27,6 +27,30 @@ export function SidebarFilters() {
     const params = new URLSearchParams(searchParams.toString())
     params.delete('category')
     router.push(`/?${params.toString()}`)
+  }
+
+  if (compact) {
+    // Horizontal scrollable chips for mobile, where the sidebar is hidden.
+    return (
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+        {CATEGORIES.map(cat => {
+          const on = selected.includes(cat.slug)
+          return (
+            <button
+              key={cat.slug}
+              onClick={() => toggle(cat.slug)}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap border transition-colors flex items-center gap-1.5 ${
+                on ? 'text-white border-transparent' : 'bg-white text-slate-600 border-slate-200'
+              }`}
+              style={on ? { backgroundColor: cat.color } : undefined}
+            >
+              {!on && <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: cat.color }} />}
+              {cat.name}
+            </button>
+          )
+        })}
+      </div>
+    )
   }
 
   return (

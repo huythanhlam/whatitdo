@@ -3,19 +3,45 @@ import { SearchBar } from '@/components/SearchBar'
 import { SidebarFilters } from '@/components/SidebarFilters'
 import { EventGrid } from '@/components/EventGrid'
 import { listEvents } from '@/lib/db'
+import { resolveDateRange } from '@/lib/dateRanges'
+import { DateFilter } from '@/components/DateFilter'
 import type { Event, Category } from '@/lib/supabase/types'
 
 type EnrichedEvent = Event & { categories?: Category[]; is_featured?: boolean; featured_label?: string | null }
 
 export const dynamic = 'force-dynamic'
 
+function first(v: string | string[] | undefined): string | undefined {
+  return typeof v === 'string' ? v : Array.isArray(v) ? v[0] : undefined
+}
+
 async function EventsLoader({ searchParams }: { searchParams: Record<string, string | string[]> }) {
-  const q = typeof searchParams.q === 'string' ? searchParams.q : Array.isArray(searchParams.q) ? searchParams.q[0] : ''
+  const q = first(searchParams.q) ?? ''
   const cats = searchParams.category
   const categories = cats ? (typeof cats === 'string' ? [cats] : cats) : []
 
+  const range = resolveDateRange({
+    when: first(searchParams.when),
+    from: first(searchParams.from),
+    to: first(searchParams.to),
+  })
+
   try {
-    const events = await listEvents({ q, categories, limit: 24, offset: 0 })
+    const events = await listEvents({
+      q,
+      categories,
+      from: range.fromIso,
+      to: range.toIso ?? undefined,
+      limit: 24,
+      offset: 0,
+    })
+    if (events.length === 0) {
+      return (
+        <div className="text-center py-16 text-muted-foreground text-sm">
+          No events found{range.label ? ` for ${range.label.toLowerCase()}` : ''}. Try a different date range or filter.
+        </div>
+      )
+    }
     return <EventGrid events={events as unknown as EnrichedEvent[]} />
   } catch {
     return <EventGrid events={[]} />
@@ -60,6 +86,15 @@ export default async function HomePage({
         <main className="flex-1 min-w-0">
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-lg font-semibold text-slate-800">Austin Events</h1>
+          </div>
+          <Suspense fallback={<div className="h-9 bg-slate-100 rounded-md animate-pulse mb-5" />}>
+            <DateFilter />
+          </Suspense>
+          {/* Category filters on mobile (sidebar is hidden < md) */}
+          <div className="md:hidden mb-5">
+            <Suspense>
+              <SidebarFilters compact />
+            </Suspense>
           </div>
           <Suspense fallback={
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

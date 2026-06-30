@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { listEvents } from '@/lib/db'
+import { resolveDateRange } from '@/lib/dateRanges'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
@@ -9,9 +10,17 @@ export async function GET(req: NextRequest) {
   const limit = 24
   const offset = (page - 1) * limit
 
+  const range = resolveDateRange({
+    when: searchParams.get('when'),
+    from: searchParams.get('from'),
+    to: searchParams.get('to'),
+  })
+
   try {
-    const events = await listEvents({ q, categories, limit, offset })
-    return NextResponse.json({ events, page, limit })
+    const events = await listEvents({
+      q, categories, from: range.fromIso, to: range.toIso ?? undefined, limit, offset,
+    })
+    return NextResponse.json({ events, page, limit, range: range.label })
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 })
   }

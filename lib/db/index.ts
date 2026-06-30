@@ -41,16 +41,23 @@ function enrichRow(row: Record<string, unknown>, nowIso: string): EnrichedEvent 
 export async function listEvents(opts: {
   q?: string
   categories?: string[]
+  from?: string
+  to?: string
   limit: number
   offset: number
 }): Promise<EnrichedEvent[]> {
   const nowIso = new Date().toISOString()
+  const fromIso = opts.from && opts.from > nowIso ? opts.from : nowIso
 
   if (isLocal()) {
     const db = await getPglite()
-    const params: unknown[] = [nowIso]
+    const params: unknown[] = [fromIso]
     let where = 'e.start_time >= $1'
 
+    if (opts.to) {
+      params.push(opts.to)
+      where += ` AND e.start_time <= $${params.length}`
+    }
     if (opts.q) {
       params.push(`%${opts.q}%`)
       where += ` AND e.title ILIKE $${params.length}`
@@ -107,10 +114,11 @@ export async function listEvents(opts: {
       event_categories(categories(id, slug, name, color)),
       featured_listings(id, ad_label, starts_at, ends_at)
     `)
-    .gte('start_time', nowIso)
+    .gte('start_time', fromIso)
     .order('start_time', { ascending: true })
     .range(opts.offset, opts.offset + opts.limit - 1)
 
+  if (opts.to) query = query.lte('start_time', opts.to)
   if (opts.q) query = query.ilike('title', `%${opts.q}%`)
   if (filteredIds !== null) {
     if (filteredIds.length === 0) return []
