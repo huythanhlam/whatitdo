@@ -6,7 +6,7 @@ import { fetchIcalEvents } from '@/lib/scrapers/ical'
 import { fetchTicketmasterEvents } from '@/lib/scrapers/ticketmaster'
 import { fetchSeatGeekEvents } from '@/lib/scrapers/seatgeek'
 import { fetchSeedEvents } from '@/lib/scrapers/seed'
-import { tagEvent } from '@/lib/tagger'
+import { tagEvents } from '@/lib/tagger'
 import { imageForCategories } from '@/lib/images'
 import { getCategoryIdBySlug, upsertEvent, setEventCategories, isLocal } from '@/lib/db'
 
@@ -47,20 +47,22 @@ export async function POST(req: NextRequest) {
   let inserted = 0
   let skipped = 0
 
-  // Process events with bounded concurrency — hundreds of events tagged one at a
-  // time would blow the function timeout. CONCURRENCY workers drain the queue.
+  // Tag ALL events first, batched — one Gemini request per ~25 events instead of
+  // one request per event. (Falls back to keyword tagging with no API calls.)
+  const allSlugs = await tagEvents(allEvents.map(e => ({ title: e.title, description: e.description })))
+
+  // Guarantee every event has a category-themed image before storing.
+  allEvents.forEach((raw, i) => {
+    if (!raw.image_url) raw.image_url = imageForCategories(allSlugs[i])
+  })
+
+  // Persist with bounded concurrency (DB writes only — no model calls here).
   const CONCURRENCY = 8
   let cursor = 0
 
-  async function processOne(raw: (typeof allEvents)[number]) {
-    // Tag first so the image fallback can pick a category-themed image, then
-    // guarantee every event has an image before storing it.
-    const slugs = await tagEvent(raw.title, raw.description)
-    if (!raw.image_url) raw.image_url = imageForCategories(slugs)
-
+  async function processOne(raw: (typeof allEvents)[number], slugs: typeof allSlugs[number]) {
     const eventId = await upsertEvent(raw)
     if (!eventId) { skipped++; return }
-
     const categoryIds = slugs.map(s => categoryIdBySlug[s]).filter(Boolean)
     await setEventCategories(eventId, categoryIds)
     inserted++
@@ -68,9 +70,9 @@ export async function POST(req: NextRequest) {
 
   async function worker() {
     while (cursor < allEvents.length) {
-      const raw = allEvents[cursor++]
+      const i = cursor++
       try {
-        await processOne(raw)
+        await processOne(allEvents[i], allSlugs[i])
       } catch {
         skipped++
       }
@@ -79,7 +81,11 @@ export async function POST(req: NextRequest) {
 
   await Promise.all(Array.from({ length: CONCURRENCY }, worker))
 
-  return NextResponse.json({ inserted, skipped, total: allEvents.length, mode: isLocal() ? 'local' : 'supabase' })
+  const geminiRequests = process.env.GEMINI_API_KEY ? Math.ceil(allEvents.length / 25) : 0
+  return NextResponse.json({
+    inserted, skipped, total: allEvents.length,
+    geminiRequests, mode: isLocal() ? 'local' : 'supabase',
+  })
 }
 
 // Allow GET for manual testing
