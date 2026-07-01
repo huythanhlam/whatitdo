@@ -50,9 +50,11 @@ async function EventsLoader({ searchParams }: { searchParams: Record<string, str
     const fromP = first(searchParams.from); if (fromP) qs.set('from', fromP)
     const toP = first(searchParams.to); if (toP) qs.set('to', toP)
 
-    return <EventList initialEvents={events as unknown as EnrichedEvent[]} query={qs.toString()} total={total} />
+    // key on the filter query so switching filters remounts the list and resets
+    // its accumulated (infinitely-scrolled) pages instead of appending to stale ones.
+    return <EventList key={qs.toString()} initialEvents={events as unknown as EnrichedEvent[]} query={qs.toString()} total={total} />
   } catch {
-    return <EventList initialEvents={[]} query="" total={0} />
+    return <EventList key="error" initialEvents={[]} query="" total={0} />
   }
 }
 
