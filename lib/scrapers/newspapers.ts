@@ -14,6 +14,9 @@ const NEWSPAPER_FEEDS: { url: string; source: string }[] = [
   { url: 'https://austin.towers.net/feed/', source: 'newspaper:towers' },
   { url: 'https://www.kvue.com/feeds/syndication/rss/news/local', source: 'newspaper:kvue' },
   { url: 'https://austin.eater.com/rss/index.xml', source: 'newspaper:eater-austin' },
+  { url: 'https://www.kxan.com/feed/', source: 'newspaper:kxan' },
+  { url: 'https://communityimpact.com/rss/', source: 'newspaper:community-impact' },
+  { url: 'https://www.fox7austin.com/rss/category/local-news', source: 'newspaper:fox7-austin' },
 ]
 
 // Allow operators to add feeds without a code change:
