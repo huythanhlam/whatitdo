@@ -5,10 +5,13 @@ import { fetchDo512Events } from '@/lib/scrapers/do512'
 import { fetchIcalEvents } from '@/lib/scrapers/ical'
 import { fetchTicketmasterEvents } from '@/lib/scrapers/ticketmaster'
 import { fetchSeatGeekEvents } from '@/lib/scrapers/seatgeek'
+import { fetchNewspaperEvents } from '@/lib/scrapers/newspapers'
+import { fetchSocialEvents } from '@/lib/scrapers/social'
+import { fetchYoutubeEvents } from '@/lib/scrapers/youtube'
+import { fetchCrawlEvents } from '@/lib/scrapers/crawler'
 import { fetchSeedEvents } from '@/lib/scrapers/seed'
-import { tagEvents } from '@/lib/tagger'
-import { imageForCategories } from '@/lib/images'
-import { getCategoryIdBySlug, upsertEvent, setEventCategories, isLocal } from '@/lib/db'
+import { persistEvents } from '@/lib/persist'
+import { isLocal } from '@/lib/db'
 
 export const maxDuration = 300
 
@@ -22,69 +25,39 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const categoryIdBySlug = await getCategoryIdBySlug()
-
-  const [eventbrite, chronicle, do512, icalResult, ticketmaster, seatgeek, seed] = await Promise.allSettled([
-    fetchEventbriteEvents(),
-    fetchAustinChronicleEvents(),
-    fetchDo512Events(),
-    fetchIcalEvents(),
-    fetchTicketmasterEvents(),
-    fetchSeatGeekEvents(),
-    fetchSeedEvents(),
-  ])
-
-  const allEvents = [
-    ...(eventbrite.status === 'fulfilled' ? eventbrite.value : []),
-    ...(chronicle.status === 'fulfilled' ? chronicle.value : []),
-    ...(do512.status === 'fulfilled' ? do512.value : []),
-    ...(icalResult.status === 'fulfilled' ? icalResult.value : []),
-    ...(ticketmaster.status === 'fulfilled' ? ticketmaster.value : []),
-    ...(seatgeek.status === 'fulfilled' ? seatgeek.value : []),
-    ...(seed.status === 'fulfilled' ? seed.value : []),
+  const sources = [
+    { name: 'eventbrite', fetch: fetchEventbriteEvents },
+    { name: 'austin-chronicle', fetch: fetchAustinChronicleEvents },
+    { name: 'do512', fetch: fetchDo512Events },
+    { name: 'ical', fetch: fetchIcalEvents },
+    { name: 'ticketmaster', fetch: fetchTicketmasterEvents },
+    { name: 'seatgeek', fetch: fetchSeatGeekEvents },
+    { name: 'newspapers', fetch: fetchNewspaperEvents },
+    { name: 'social', fetch: fetchSocialEvents },
+    { name: 'youtube', fetch: fetchYoutubeEvents },
+    { name: 'crawl', fetch: fetchCrawlEvents },
+    { name: 'seed', fetch: fetchSeedEvents },
   ]
 
-  let inserted = 0
-  let skipped = 0
+  const settled = await Promise.allSettled(sources.map(s => s.fetch()))
 
-  // Tag ALL events first, batched — one Gemini request per ~25 events instead of
-  // one request per event. (Falls back to keyword tagging with no API calls.)
-  const allSlugs = await tagEvents(allEvents.map(e => ({ title: e.title, description: e.description })))
-
-  // Guarantee every event has a category-themed image before storing.
-  allEvents.forEach((raw, i) => {
-    if (!raw.image_url) raw.image_url = imageForCategories(allSlugs[i])
+  // Per-source counts so the response shows where events came from (and which
+  // feeds returned nothing this run).
+  const bySource: Record<string, number> = {}
+  const allEvents = settled.flatMap((res, i) => {
+    const events = res.status === 'fulfilled' ? res.value : []
+    bySource[sources[i].name] = events.length
+    if (res.status === 'rejected') console.error(`Source ${sources[i].name} failed:`, res.reason)
+    return events
   })
 
-  // Persist with bounded concurrency (DB writes only — no model calls here).
-  const CONCURRENCY = 8
-  let cursor = 0
-
-  async function processOne(raw: (typeof allEvents)[number], slugs: typeof allSlugs[number]) {
-    const eventId = await upsertEvent(raw)
-    if (!eventId) { skipped++; return }
-    const categoryIds = slugs.map(s => categoryIdBySlug[s]).filter(Boolean)
-    await setEventCategories(eventId, categoryIds)
-    inserted++
-  }
-
-  async function worker() {
-    while (cursor < allEvents.length) {
-      const i = cursor++
-      try {
-        await processOne(allEvents[i], allSlugs[i])
-      } catch {
-        skipped++
-      }
-    }
-  }
-
-  await Promise.all(Array.from({ length: CONCURRENCY }, worker))
+  // Tag (batched Gemini or keyword fallback), assign images, and upsert.
+  const { inserted, skipped } = await persistEvents(allEvents)
 
   const geminiRequests = process.env.GEMINI_API_KEY ? Math.ceil(allEvents.length / 25) : 0
   return NextResponse.json({
     inserted, skipped, total: allEvents.length,
-    geminiRequests, mode: isLocal() ? 'local' : 'supabase',
+    bySource, geminiRequests, mode: isLocal() ? 'local' : 'supabase',
   })
 }
 
