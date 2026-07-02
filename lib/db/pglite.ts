@@ -22,6 +22,20 @@ import { imageForCategories } from '@/lib/images'
 const globalForPglite = globalThis as unknown as { __pglite?: Promise<PGlite> }
 
 async function init(): Promise<PGlite> {
+  // Loud warning if we're falling back to ephemeral PGlite on a real deployment:
+  // each serverless instance gets its own in-memory DB reseeded to the ~12
+  // baseline events, so ingested events never persist and every page shows the
+  // same dozen seeds. The fix is configuring Supabase (see .env.example). Only a
+  // deployment (VERCEL) is a problem — local dev intentionally runs on PGlite.
+  if (process.env.VERCEL) {
+    console.warn(
+      '[db] Running on ephemeral in-memory PGlite in a deployed environment — ' +
+        'ingested events will NOT persist and the app will only ever show the ~12 ' +
+        'baseline seed events. Set NEXT_PUBLIC_SUPABASE_URL and ' +
+        'SUPABASE_SERVICE_ROLE_KEY to use the persistent Supabase store.'
+    )
+  }
+
   const db = new PGlite()
 
   await db.exec(`
