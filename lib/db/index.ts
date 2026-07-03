@@ -51,6 +51,14 @@ const FEATURED_JSON = `COALESCE((
   FROM featured_listings f WHERE f.event_id = e.id
 ), '[]'::json) AS featured_listings`
 
+// Full-text search over title + description + venue, matching the expression of
+// the GIN index in migration 001 so it uses that index instead of a sequential
+// ILIKE scan. websearch_to_tsquery accepts natural query syntax ("live music",
+// quoted phrases, -exclusions) and is null-safe on empty input.
+const FTS_MATCH = `to_tsvector('english',
+  coalesce(e.title,'') || ' ' || coalesce(e.description,'') || ' ' || coalesce(e.venue_name,'')
+) @@ websearch_to_tsquery('english', $PARAM)`
+
 // ---------------------------------------------------------------------------
 // listEvents
 // ---------------------------------------------------------------------------
@@ -74,8 +82,8 @@ export async function listEvents(opts: {
     where += ` AND e.start_time <= $${params.length}`
   }
   if (opts.q) {
-    params.push(`%${opts.q}%`)
-    where += ` AND e.title ILIKE $${params.length}`
+    params.push(opts.q)
+    where += ` AND ${FTS_MATCH.replace('$PARAM', `$${params.length}`)}`
   }
   if (opts.categories && opts.categories.length > 0) {
     params.push(opts.categories)
@@ -114,7 +122,7 @@ export async function countEvents(opts: {
   const params: unknown[] = [fromIso]
   let where = 'e.start_time >= $1'
   if (opts.to) { params.push(opts.to); where += ` AND e.start_time <= $${params.length}` }
-  if (opts.q) { params.push(`%${opts.q}%`); where += ` AND e.title ILIKE $${params.length}` }
+  if (opts.q) { params.push(opts.q); where += ` AND ${FTS_MATCH.replace('$PARAM', `$${params.length}`)}` }
   if (opts.categories && opts.categories.length > 0) {
     params.push(opts.categories)
     where += ` AND e.id IN (SELECT ec.event_id FROM event_categories ec

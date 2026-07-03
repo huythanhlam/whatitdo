@@ -1,3 +1,6 @@
+// The app's shared domain types — one definition each. (Formerly split between
+// lib/supabase/types.ts and four verbatim copies of EnrichedEvent in the UI.)
+
 export type Category = {
   id: number
   slug: string
@@ -22,6 +25,14 @@ export type Event = {
   price_max: number | null
   created_at: string
   updated_at: string
+  categories?: Category[]
+  is_featured?: boolean
+  featured_label?: string | null
+}
+
+// An event with its joined categories and resolved featured state — what every
+// read path in lib/db returns and every card/list/calendar consumes.
+export type EnrichedEvent = Event & {
   categories?: Category[]
   is_featured?: boolean
   featured_label?: string | null

@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { getEvent as fetchEvent } from '@/lib/db'
 import { getTicketProvider } from '@/lib/tickets'
-import type { Event, Category } from '@/lib/supabase/types'
+import type { Event, Category } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 

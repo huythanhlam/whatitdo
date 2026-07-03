@@ -1,7 +1,4 @@
-'use client'
-import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   WEEKDAY_LABELS,
@@ -12,101 +9,79 @@ import {
   addMonths,
   type DayCell,
 } from '@/lib/calendar'
-import type { Event, Category } from '@/lib/supabase/types'
-
-type EnrichedEvent = Event & { categories?: Category[]; is_featured?: boolean; featured_label?: string | null }
+import type { EnrichedEvent } from '@/lib/types'
 
 const MAX_CHIPS = 3
 
-// Calendar grid of upcoming events. Fetches the visible month from /api/calendar
-// (respecting the active search/category filters) and buckets events by their
-// Austin-local day. Past days are simply empty — the app never shows past events.
-export function CalendarView() {
-  const searchParams = useSearchParams()
-  const [{ year, month }, setMonth] = useState(currentCentralMonth) // month: 0-indexed
-  const [events, setEvents] = useState<EnrichedEvent[]>([])
-  const [loadedKey, setLoadedKey] = useState<string | null>(null)
+// The visible month is URL state (?cal=YYYY-MM), matching the app's URL-as-state
+// pattern, so the RSC can fetch the month window server-side (see app/page.tsx)
+// and hand it here. Month navigation is plain <Link>s — no client fetch, no
+// useEffect, no 1000-event client download.
+function calParam(year: number, month: number): string {
+  return `${year}-${String(month + 1).padStart(2, '0')}`
+}
 
-  // Filters that the calendar should honor, minus view/date-nav params.
-  const filterQs = useMemo(() => {
-    const qs = new URLSearchParams()
-    const q = searchParams.get('q')
-    if (q) qs.set('q', q)
-    searchParams.getAll('category').forEach(c => qs.append('category', c))
-    return qs.toString()
-  }, [searchParams])
+// Build a homepage URL for a given month, preserving the active filters.
+function monthHref(year: number, month: number, filterQs: string): string {
+  const qs = new URLSearchParams(filterQs)
+  qs.set('view', 'calendar')
+  qs.set('cal', calParam(year, month))
+  return `/?${qs.toString()}`
+}
 
-  // Loading is derived (no synchronous setState in the effect): we're loading
-  // whenever the data we hold doesn't match the month + filters being requested.
-  const reqKey = `${year}-${month}-${filterQs}`
-  const loading = loadedKey !== reqKey
-
-  useEffect(() => {
-    let cancelled = false
-    const sep = filterQs ? '&' : ''
-    fetch(`/api/calendar?year=${year}&month=${month + 1}${sep}${filterQs}`, { cache: 'no-store' })
-      .then(res => res.json())
-      .then(data => {
-        if (!cancelled) setEvents(data.events ?? [])
-      })
-      .catch(() => {
-        if (!cancelled) setEvents([])
-      })
-      .finally(() => {
-        if (!cancelled) setLoadedKey(reqKey)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [reqKey, year, month, filterQs])
-
-  // Bucket events by their Central-time day key.
-  const byDay = useMemo(() => {
-    const map = new Map<string, EnrichedEvent[]>()
-    for (const ev of events) {
-      const key = eventDayKey(ev.start_time)
-      const list = map.get(key)
-      if (list) list.push(ev)
-      else map.set(key, [ev])
-    }
-    return map
-  }, [events])
-
-  const cells = useMemo(() => monthGrid(year, month), [year, month])
-
-  function go(delta: number) {
-    setMonth(m => addMonths(m.year, m.month, delta))
+export function CalendarView({
+  events,
+  year,
+  month,
+  filterQs,
+}: {
+  events: EnrichedEvent[]
+  year: number
+  month: number // 0-indexed
+  filterQs: string
+}) {
+  const byDay = new Map<string, EnrichedEvent[]>()
+  for (const ev of events) {
+    const key = eventDayKey(ev.start_time)
+    const list = byDay.get(key)
+    if (list) list.push(ev)
+    else byDay.set(key, [ev])
   }
+
+  const cells = monthGrid(year, month)
+  const prev = addMonths(year, month, -1)
+  const next = addMonths(year, month, 1)
+  const today = currentCentralMonth()
 
   return (
     <div>
       {/* Month navigation */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-1">
-          <button
-            onClick={() => go(-1)}
+          <Link
+            href={monthHref(prev.year, prev.month, filterQs)}
             aria-label="Previous month"
             className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 hover:text-violet-700 transition-colors"
           >
             <ChevronLeft className="w-5 h-5" />
-          </button>
+          </Link>
           <h2 className="text-base font-semibold text-slate-800 min-w-[10rem] text-center">
             {MONTH_LABELS[month]} {year}
           </h2>
-          <button
-            onClick={() => go(1)}
+          <Link
+            href={monthHref(next.year, next.month, filterQs)}
             aria-label="Next month"
             className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 hover:text-violet-700 transition-colors"
           >
             <ChevronRight className="w-5 h-5" />
-          </button>
+          </Link>
         </div>
-        <button
-          onClick={() => setMonth(currentCentralMonth())}
+        <Link
+          href={monthHref(today.year, today.month, filterQs)}
           className="text-sm font-medium text-violet-700 hover:text-violet-900 px-2.5 py-1 rounded-md hover:bg-violet-50 transition-colors"
         >
           Today
-        </button>
+        </Link>
       </div>
 
       <div className="relative overflow-x-auto">
@@ -127,12 +102,6 @@ export function CalendarView() {
             ))}
           </div>
         </div>
-
-        {loading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-white/60">
-            <span className="text-sm text-slate-500">Loading events…</span>
-          </div>
-        )}
       </div>
 
       <p className="text-xs text-muted-foreground mt-3">
