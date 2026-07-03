@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -7,17 +8,12 @@ import type { Event, Category } from '@/lib/supabase/types'
 
 export const dynamic = 'force-dynamic'
 
-async function getEvent(id: string): Promise<(Event & { categories?: Category[] }) | null> {
-  try {
-    return (await fetchEvent(id)) as unknown as (Event & { categories?: Category[] }) | null
-  } catch {
-    return null
-  }
-}
-
 export default async function EventDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const event = await getEvent(id)
+  // A missing event is a 404 (notFound → app/not-found.tsx); a DB failure throws
+  // and surfaces via the error boundary (app/error.tsx) instead of masquerading
+  // as "not found".
+  const event = (await fetchEvent(id)) as unknown as (Event & { categories?: Category[] }) | null
 
   if (!event) notFound()
 
@@ -34,7 +30,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
     <div className="min-h-screen bg-background">
       <header className="border-b bg-white/95 sticky top-0 z-40">
         <div className="max-w-3xl mx-auto px-4 py-3">
-          <a href="/" className="text-sm text-violet-600 hover:underline">← Back to events</a>
+          <Link href="/" className="text-sm text-violet-600 hover:underline">← Back to events</Link>
         </div>
       </header>
 
@@ -85,7 +81,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
             </Button>
           )}
           <Button variant="outline" asChild>
-            <a href="/subscribe">🔔 Get event alerts</a>
+            <Link href="/subscribe">🔔 Get event alerts</Link>
           </Button>
         </div>
         {event.ticket_url && provider && provider.name !== 'venue site' && (

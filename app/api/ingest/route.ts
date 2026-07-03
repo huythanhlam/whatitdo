@@ -12,19 +12,11 @@ import { fetchCrawlEvents } from '@/lib/scrapers/crawler'
 import { fetchSeedEvents } from '@/lib/scrapers/seed'
 import { persistEvents } from '@/lib/persist'
 import { isLocal } from '@/lib/db'
+import { requireCronAuth } from '@/lib/auth'
 
 export const maxDuration = 300
 
-export async function POST(req: NextRequest) {
-  // In local mode (no Supabase / no CRON_SECRET) the route is open for easy
-  // testing; in production it requires the CRON_SECRET bearer token.
-  if (!isLocal() || process.env.CRON_SECRET) {
-    const authHeader = req.headers.get('authorization')
-    if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-  }
-
+async function runIngest() {
   const sources = [
     { name: 'eventbrite', fetch: fetchEventbriteEvents },
     { name: 'austin-chronicle', fetch: fetchAustinChronicleEvents },
@@ -61,7 +53,16 @@ export async function POST(req: NextRequest) {
   })
 }
 
-// Allow GET for manual testing
+export async function POST(req: NextRequest) {
+  const denied = requireCronAuth(req)
+  if (denied) return denied
+  return runIngest()
+}
+
+// Vercel Cron invokes scheduled jobs with a GET request (carrying the
+// CRON_SECRET bearer), so GET must be supported — it is guarded identically.
 export async function GET(req: NextRequest) {
-  return POST(req)
+  const denied = requireCronAuth(req)
+  if (denied) return denied
+  return runIngest()
 }

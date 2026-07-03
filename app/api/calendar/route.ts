@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
     const events = await listEvents({ q, categories, from: fromIso, to: toIso, limit: 1000, offset: 0 })
     return NextResponse.json({ events, year, month })
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+    console.error('Failed to load calendar events:', e)
+    return NextResponse.json({ error: 'Could not load calendar' }, { status: 500 })
   }
 }

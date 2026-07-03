@@ -5,8 +5,12 @@
       "schedule": "0 6 * * *"
     },
     {
-      "path": "/api/email/digest",
+      "path": "/api/email/digest?frequency=daily",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/email/digest?frequency=weekly",
+      "schedule": "0 14 * * 1"
     }
   ]
 }

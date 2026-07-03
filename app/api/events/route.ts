@@ -6,7 +6,8 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const q = searchParams.get('q') ?? ''
   const categories = searchParams.getAll('category')
-  const page = parseInt(searchParams.get('page') ?? '1', 10)
+  const parsedPage = parseInt(searchParams.get('page') ?? '1', 10)
+  const page = Number.isInteger(parsedPage) && parsedPage >= 1 ? parsedPage : 1
   const limit = 24
   const offset = (page - 1) * limit
 
@@ -22,6 +23,7 @@ export async function GET(req: NextRequest) {
     })
     return NextResponse.json({ events, page, limit, range: range.label })
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
+    console.error('Failed to list events:', e)
+    return NextResponse.json({ error: 'Could not load events' }, { status: 500 })
   }
 }
