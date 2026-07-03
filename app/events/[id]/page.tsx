@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -29,7 +30,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
     <div className="min-h-screen bg-background">
       <header className="border-b bg-white/95 sticky top-0 z-40">
         <div className="max-w-3xl mx-auto px-4 py-3">
-          <a href="/" className="text-sm text-violet-600 hover:underline">← Back to events</a>
+          <Link href="/" className="text-sm text-violet-600 hover:underline">← Back to events</Link>
         </div>
       </header>
 
@@ -80,7 +81,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
             </Button>
           )}
           <Button variant="outline" asChild>
-            <a href="/subscribe">🔔 Get event alerts</a>
+            <Link href="/subscribe">🔔 Get event alerts</Link>
           </Button>
         </div>
         {event.ticket_url && provider && provider.name !== 'venue site' && (

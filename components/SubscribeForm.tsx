@@ -1,5 +1,6 @@
 'use client'
 import { useState } from 'react'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -36,7 +37,7 @@ export function SubscribeForm() {
         <p className="text-5xl">🎉</p>
         <h2 className="text-xl font-bold">You&apos;re subscribed!</h2>
         <p className="text-sm text-muted-foreground">Check your inbox — first digest arrives tomorrow morning.</p>
-        <a href="/" className="block mt-4 text-sm text-violet-600 hover:underline">Browse events now →</a>
+        <Link href="/" className="block mt-4 text-sm text-violet-600 hover:underline">Browse events now →</Link>
       </div>
     )
   }

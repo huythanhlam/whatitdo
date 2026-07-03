@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { SubscribeForm } from '@/components/SubscribeForm'
 
 export default function SubscribePage() {
@@ -5,7 +6,7 @@ export default function SubscribePage() {
     <div className="min-h-screen bg-background">
       <header className="border-b bg-white/95 sticky top-0 z-40">
         <div className="max-w-3xl mx-auto px-4 py-3">
-          <a href="/" className="text-sm text-violet-600 hover:underline">← Back to events</a>
+          <Link href="/" className="text-sm text-violet-600 hover:underline">← Back to events</Link>
         </div>
       </header>
 

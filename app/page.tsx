@@ -1,4 +1,5 @@
 import { Suspense } from 'react'
+import Link from 'next/link'
 import { SearchBar } from '@/components/SearchBar'
 import { SidebarFilters } from '@/components/SidebarFilters'
 import { EventList } from '@/components/EventList'
@@ -68,20 +69,20 @@ export default async function HomePage({
     <div className="min-h-screen bg-background">
       <header className="border-b sticky top-0 z-40 bg-white/95 backdrop-blur-sm shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-4">
-          <a href="/" className="font-bold text-lg text-violet-600 shrink-0 whitespace-nowrap">
+          <Link href="/" className="font-bold text-lg text-violet-600 shrink-0 whitespace-nowrap">
             🎉 What It Do ATX
-          </a>
+          </Link>
           <div className="flex-1 max-w-xl">
             <Suspense fallback={<div className="h-9 bg-slate-100 rounded-md animate-pulse" />}>
               <SearchBar />
             </Suspense>
           </div>
-          <a
+          <Link
             href="/subscribe"
             className="shrink-0 text-sm bg-violet-600 text-white px-3 py-1.5 rounded-md hover:bg-violet-700 transition-colors font-medium"
           >
             Get Updates
-          </a>
+          </Link>
         </div>
       </header>
 
