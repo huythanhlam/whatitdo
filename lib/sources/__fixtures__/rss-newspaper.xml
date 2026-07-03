@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+  <channel>
+    <title>KUT Events</title>
+    <link>https://www.kut.org/</link>
+    <description>Austin events</description>
+    <item>
+      <title>Blues on the Green returns to Zilker Park this Wednesday</title>
+      <link>https://www.kut.org/austin/blues-on-the-green-2026</link>
+      <description><![CDATA[<p>The free summer concert series is back. <img src="https://media.kut.org/blues.jpg" /></p>]]></description>
+      <pubDate>Mon, 29 Jun 2026 14:00:00 -0500</pubDate>
+      <media:content url="https://media.kut.org/blues-green.jpg" />
+    </item>
+    <item>
+      <title>City council debates new noise ordinance</title>
+      <link>https://www.kut.org/austin/noise-ordinance</link>
+      <description>General news, not an event.</description>
+      <pubDate>Sun, 28 Jun 2026 09:00:00 -0500</pubDate>
+    </item>
+    <item>
+      <title></title>
+      <link>https://www.kut.org/austin/empty</link>
+      <description>Item with no title should be skipped.</description>
+      <pubDate>Sat, 27 Jun 2026 09:00:00 -0500</pubDate>
+    </item>
+  </channel>
+</rss>
