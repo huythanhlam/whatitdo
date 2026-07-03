@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { FeaturedBadge } from './FeaturedBadge'
@@ -36,11 +37,13 @@ export function EventCard({ event, featured = false, featuredLabel }: Props) {
 
       <Link href={`/events/${event.id}`} className="block group flex-1">
         {event.image_url ? (
-          <div className="h-44 overflow-hidden bg-slate-100">
-            <img
+          <div className="relative h-44 overflow-hidden bg-slate-100">
+            <Image
               src={event.image_url}
               alt={event.title}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              fill
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+              className="object-cover group-hover:scale-105 transition-transform duration-300"
             />
           </div>
         ) : (
