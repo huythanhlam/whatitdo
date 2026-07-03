@@ -7,17 +7,12 @@ import type { Event, Category } from '@/lib/supabase/types'
 
 export const dynamic = 'force-dynamic'
 
-async function getEvent(id: string): Promise<(Event & { categories?: Category[] }) | null> {
-  try {
-    return (await fetchEvent(id)) as unknown as (Event & { categories?: Category[] }) | null
-  } catch {
-    return null
-  }
-}
-
 export default async function EventDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const event = await getEvent(id)
+  // A missing event is a 404 (notFound → app/not-found.tsx); a DB failure throws
+  // and surfaces via the error boundary (app/error.tsx) instead of masquerading
+  // as "not found".
+  const event = (await fetchEvent(id)) as unknown as (Event & { categories?: Category[] }) | null
 
   if (!event) notFound()
 

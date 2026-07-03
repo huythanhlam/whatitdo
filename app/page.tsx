@@ -28,32 +28,32 @@ async function EventsLoader({ searchParams }: { searchParams: Record<string, str
     to: first(searchParams.to),
   })
 
-  try {
-    const filterArgs = { q, categories, from: range.fromIso, to: range.toIso ?? undefined }
-    const [events, total] = await Promise.all([
-      listEvents({ ...filterArgs, limit: 24, offset: 0 }),
-      countEvents(filterArgs),
-    ])
-    if (events.length === 0) {
-      return (
-        <div className="text-center py-16 text-muted-foreground text-sm">
-          No events found{range.label ? ` for ${range.label.toLowerCase()}` : ''}. Try a different date range or filter.
-        </div>
-      )
-    }
+  // A DB failure here propagates to the route error boundary (app/error.tsx)
+  // rather than being masked as "no events" — an outage should look different
+  // from an empty result.
+  const filterArgs = { q, categories, from: range.fromIso, to: range.toIso ?? undefined }
+  const [events, total] = await Promise.all([
+    listEvents({ ...filterArgs, limit: 24, offset: 0 }),
+    countEvents(filterArgs),
+  ])
 
-    // Build the filter query string (sans page) so Load More keeps the filters.
-    const qs = new URLSearchParams()
-    if (q) qs.set('q', q)
-    categories.forEach(c => qs.append('category', c))
-    const when = first(searchParams.when); if (when) qs.set('when', when)
-    const fromP = first(searchParams.from); if (fromP) qs.set('from', fromP)
-    const toP = first(searchParams.to); if (toP) qs.set('to', toP)
-
-    return <EventList initialEvents={events as unknown as EnrichedEvent[]} query={qs.toString()} total={total} />
-  } catch {
-    return <EventList initialEvents={[]} query="" total={0} />
+  if (events.length === 0) {
+    return (
+      <div className="text-center py-16 text-muted-foreground text-sm">
+        No events found{range.label ? ` for ${range.label.toLowerCase()}` : ''}. Try a different date range or filter.
+      </div>
+    )
   }
+
+  // Build the filter query string (sans page) so Load More keeps the filters.
+  const qs = new URLSearchParams()
+  if (q) qs.set('q', q)
+  categories.forEach(c => qs.append('category', c))
+  const when = first(searchParams.when); if (when) qs.set('when', when)
+  const fromP = first(searchParams.from); if (fromP) qs.set('from', fromP)
+  const toP = first(searchParams.to); if (toP) qs.set('to', toP)
+
+  return <EventList initialEvents={events as unknown as EnrichedEvent[]} query={qs.toString()} total={total} />
 }
 
 export default async function HomePage({
