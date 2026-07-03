@@ -3,19 +3,10 @@ import { SOURCES } from '@/lib/sources/registry'
 import type { SourceAdapter, SourceContext } from '@/lib/sources/types'
 import { persistEvents } from '@/lib/persist'
 import { isLocal, startSourceRun, finishSourceRun } from '@/lib/db'
+import { withGeminiMeter } from '@/lib/gemini'
 import { requireCronAuth } from '@/lib/auth'
 
 export const maxDuration = 300
-
-// Sources that spend Gemini tokens (crawl/RSS extraction). Used only for the
-// rough per-run gemini_requests estimate below; PR3's single Gemini client will
-// replace this with an exact per-source count from the budget counter.
-const GEMINI_KINDS = new Set(['crawl', 'rss'])
-function geminiEstimate(source: SourceAdapter, found: number): number {
-  if (!process.env.GEMINI_API_KEY) return 0
-  const usesGemini = GEMINI_KINDS.has(source.kind) || source.name === 'youtube'
-  return usesGemini ? Math.ceil(found / 25) : 0
-}
 
 function contextFor(source: SourceAdapter): SourceContext {
   return {
@@ -40,14 +31,26 @@ async function runSource(source: SourceAdapter): Promise<{ upserted: number; fou
 
   const id = await startSourceRun(source.name)
   try {
-    const events = await source.fetch(contextFor(source))
-    const { inserted, rejected, total } = await persistEvents(events)
+    // Scope a Gemini meter to this source so its fetch-time extraction and
+    // persist-time tagging requests are attributed to it, even though sources
+    // run concurrently.
+    const { result, meter } = await withGeminiMeter(async () => {
+      const events = await source.fetch(contextFor(source))
+      return persistEvents(events)
+    })
+    const { inserted, rejected, total } = result
+
+    // A source shut out entirely by the daily budget (made zero requests, all
+    // deferred, no events) is recorded as skipped-for-budget so it's visible and
+    // goes first next run — not silently dropped (PRODUCT-SPEC §6.1).
+    const budgetBlocked = meter.requests === 0 && meter.skippedForBudget > 0 && total === 0
     await finishSourceRun(id, {
-      status: 'ok',
+      status: budgetBlocked ? 'skipped' : 'ok',
       events_found: total,
       events_upserted: inserted,
       events_rejected: rejected,
-      gemini_requests: geminiEstimate(source, total),
+      gemini_requests: meter.requests,
+      error: meter.skippedForBudget > 0 ? `${meter.skippedForBudget} Gemini calls skipped (daily budget)` : null,
     })
     return { upserted: inserted, found: total, rejected }
   } catch (e) {

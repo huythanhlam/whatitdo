@@ -1,8 +1,5 @@
-import { GoogleGenAI } from '@google/genai'
+import { geminiJson, mapPool, hasGemini, TAGGING_MODEL } from './gemini'
 import { CATEGORY_SLUGS, type CategorySlug } from './categories'
-
-const apiKey = process.env.GEMINI_API_KEY
-const ai = apiKey ? new GoogleGenAI({ apiKey }) : null
 
 // Keyword fallback so events are always tagged, even without a Gemini key
 // configured. Order matters only for readability — all matches are collected.
@@ -41,28 +38,15 @@ function sanitizeSlugs(arr: unknown, ev: TaggableEvent): CategorySlug[] {
 // (no API call) when no key is configured, and per-batch on any API/parse error.
 export async function tagEvents(events: TaggableEvent[]): Promise<CategorySlug[][]> {
   if (events.length === 0) return []
-  if (!ai) return events.map(e => tagByKeyword(e.title, e.description))
+  if (!hasGemini()) return events.map(e => tagByKeyword(e.title, e.description))
 
-  const results: CategorySlug[][] = new Array(events.length)
-
-  // Build the batches, then run them with bounded concurrency.
-  const batches: { start: number; items: TaggableEvent[] }[] = []
+  const batches: TaggableEvent[][] = []
   for (let i = 0; i < events.length; i += BATCH_SIZE) {
-    batches.push({ start: i, items: events.slice(i, i + BATCH_SIZE) })
+    batches.push(events.slice(i, i + BATCH_SIZE))
   }
 
-  const CONCURRENCY = 4
-  let cursor = 0
-  async function worker() {
-    while (cursor < batches.length) {
-      const batch = batches[cursor++]
-      const tagged = await tagBatch(batch.items)
-      tagged.forEach((slugs, j) => { results[batch.start + j] = slugs })
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, batches.length) }, worker))
-
-  return results
+  const taggedBatches = await mapPool(batches, 4, batch => tagBatch(batch))
+  return taggedBatches.flat()
 }
 
 async function tagBatch(events: TaggableEvent[]): Promise<CategorySlug[][]> {
@@ -84,65 +68,14 @@ ${list}
 
 JSON:`
 
-  try {
-    const response = await ai!.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: { maxOutputTokens: 1024, temperature: 0 },
-    })
-
-    const text = (response.text ?? '')
-      .trim()
-      .replace(/^```(?:json)?\s*/i, '')
-      .replace(/\s*```$/, '')
-      .trim()
-
-    const parsed = JSON.parse(text) as Record<string, unknown>
-    return events.map((ev, i) => sanitizeSlugs(parsed[String(i)], ev))
-  } catch {
-    // Whole-batch failure → keyword fallback for this batch (still no extra API calls).
-    return events.map(ev => tagByKeyword(ev.title, ev.description))
-  }
-}
-
-export async function tagEvent(title: string, description: string | null): Promise<CategorySlug[]> {
-  // No Gemini key configured → deterministic keyword tagging.
-  if (!ai) return tagByKeyword(title, description)
-
-  const prompt = `You are categorizing Austin, TX events. Given an event title and description, return a JSON array of category slugs that apply.
-
-Available slugs: ${CATEGORY_SLUGS.join(', ')}
-
-Rules:
-- Return 1-3 slugs maximum
-- Return only slugs from the list above
-- Return ["other"] if nothing fits
-- Return only the JSON array, no explanation, no markdown fences
-
-Event title: ${title}
-Event description: ${description ?? 'No description provided'}
-
-Response (JSON array only):`
-
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: { maxOutputTokens: 64, temperature: 0 },
-    })
-
-    const text = (response.text ?? '')
-      .trim()
-      .replace(/^```(?:json)?\s*/i, '')
-      .replace(/\s*```$/, '')
-      .trim()
-
-    const parsed = JSON.parse(text)
-    if (!Array.isArray(parsed)) return tagByKeyword(title, description)
-    const valid = parsed.filter((s): s is CategorySlug => (CATEGORY_SLUGS as string[]).includes(s))
-    // If Gemini returns nothing usable, fall back to keywords rather than dropping the event.
-    return valid.length > 0 ? valid : tagByKeyword(title, description)
-  } catch {
-    return tagByKeyword(title, description)
-  }
+  // Classification is easy, so use the cheaper/higher-quota flash-lite model.
+  // A null result (no key / budget exhausted / parse failure) → keyword fallback
+  // for this batch, so events are still tagged with no extra API calls.
+  const parsed = await geminiJson<Record<string, unknown>>({
+    prompt,
+    model: TAGGING_MODEL,
+    maxOutputTokens: 1024,
+  })
+  if (!parsed) return events.map(ev => tagByKeyword(ev.title, ev.description))
+  return events.map((ev, i) => sanitizeSlugs(parsed[String(i)], ev))
 }
