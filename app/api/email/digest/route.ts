@@ -1,14 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sendDailyDigests } from '@/lib/email/digest'
+import { sendDigests, type DigestFrequency } from '@/lib/email/digest'
+import { requireCronAuth } from '@/lib/auth'
 
 export const maxDuration = 300
 
-export async function POST(req: NextRequest) {
-  const authHeader = req.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+function frequencyFrom(req: NextRequest): DigestFrequency {
+  return req.nextUrl.searchParams.get('frequency') === 'weekly' ? 'weekly' : 'daily'
+}
 
-  const result = await sendDailyDigests()
+async function run(req: NextRequest) {
+  const denied = requireCronAuth(req)
+  if (denied) return denied
+  const result = await sendDigests(frequencyFrom(req))
   return NextResponse.json(result)
+}
+
+export async function POST(req: NextRequest) {
+  return run(req)
+}
+
+// Vercel Cron invokes scheduled jobs with a GET request (carrying the
+// CRON_SECRET bearer), so GET must be supported — it is guarded identically.
+export async function GET(req: NextRequest) {
+  return run(req)
 }

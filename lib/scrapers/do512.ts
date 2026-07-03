@@ -28,10 +28,11 @@ export async function fetchDo512Events(): Promise<RawEvent[]> {
       const link = $el.find('a').first().attr('href') ?? ''
       const imgSrc = $el.find('img').first().attr('src') ?? null
 
+      // Skip events whose date we can't actually parse — never fabricate a time
+      // (an invented date is worse than an omitted event).
       const parsed = dateText ? new Date(dateText) : null
-      const start_time = parsed && !isNaN(parsed.getTime())
-        ? parsed.toISOString()
-        : new Date(Date.now() + 86400000).toISOString()
+      if (!parsed || isNaN(parsed.getTime())) return
+      const start_time = parsed.toISOString()
 
       const ticket_url = link.startsWith('http') ? link : `https://do512.com${link}`
 

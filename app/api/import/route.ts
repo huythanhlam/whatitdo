@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { fetchPage } from '@/lib/scrapers/crawler'
+import { pageFromHtml } from '@/lib/scrapers/crawler'
 import { extractEventsFromPages, type CrawlPage } from '@/lib/extractor'
 import { persistEvents } from '@/lib/persist'
 import { isLocal } from '@/lib/db'
+import { requireCronAuth } from '@/lib/auth'
+import { safeFetchHtml, SsrfError } from '@/lib/ssrf'
 
 export const maxDuration = 120
 
@@ -16,21 +18,27 @@ export const maxDuration = 120
 // Instagram/TikTok caption (or any post text) and import the events from it,
 // since those feeds can't be fetched server-side.
 
-function authorized(req: NextRequest): boolean {
-  // Match the ingest route's guard: open locally; require CRON_SECRET when set.
-  if (!process.env.CRON_SECRET) return true
-  return req.headers.get('authorization') === `Bearer ${process.env.CRON_SECRET}`
-}
-
 async function runImport(url: string, text: string): Promise<NextResponse> {
   let page: CrawlPage | null = null
 
   if (url) {
-    if (!/^https?:\/\//i.test(url)) {
-      return NextResponse.json({ error: 'url must be an absolute http(s) URL' }, { status: 400 })
+    // User-supplied URL: fetch with SSRF protection (no internal addresses,
+    // redirects validated per-hop, size/time capped). No browser-render
+    // fallback here — for JS-walled pages, paste the post text instead.
+    let html: string
+    try {
+      html = await safeFetchHtml(url)
+    } catch (e) {
+      if (e instanceof SsrfError) {
+        return NextResponse.json({ error: `Cannot fetch that URL: ${e.message}` }, { status: 400 })
+      }
+      return NextResponse.json(
+        { error: 'Could not read that URL (it may require login or returned no content). Paste the post text instead.' },
+        { status: 422 }
+      )
     }
-    page = await fetchPage(url)
-    if (!page || page.text.length < 40) {
+    page = pageFromHtml(html, url)
+    if (page.text.length < 40) {
       return NextResponse.json(
         { error: 'Could not read that URL (it may require login or returned no content). Paste the post text instead.' },
         { status: 422 }
@@ -74,7 +82,8 @@ async function runImport(url: string, text: string): Promise<NextResponse> {
 }
 
 export async function POST(req: NextRequest) {
-  if (!authorized(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const denied = requireCronAuth(req)
+  if (denied) return denied
 
   let body: { url?: unknown; text?: unknown }
   try {
@@ -89,7 +98,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  if (!authorized(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const denied = requireCronAuth(req)
+  if (denied) return denied
   const url = req.nextUrl.searchParams.get('url')?.trim() ?? ''
   if (!url) {
     return NextResponse.json({ usage: 'POST { url } or { text }; or GET ?url=https://...' })
