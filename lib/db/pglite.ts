@@ -1,5 +1,5 @@
 import { PGlite } from '@electric-sql/pglite'
-import { fetchSeedEvents } from '@/lib/scrapers/seed'
+import { fetchSeedEvents } from '@/lib/sources/seed'
 import { tagByKeyword } from '@/lib/tagger'
 import { imageForCategories } from '@/lib/images'
 import type { Db } from './driver'

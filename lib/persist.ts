@@ -1,15 +1,39 @@
 import { tagEvents } from '@/lib/tagger'
 import { imageForCategories } from '@/lib/images'
 import { getCategoryIdBySlug, upsertEvent, setEventCategories } from '@/lib/db'
-import type { RawEvent } from '@/lib/scrapers/types'
+import type { RawEvent } from '@/lib/sources/types'
+
+// The single validation gate. A fabricated or nonsensical date is worse than no
+// event — it actively misleads users — so an event is rejected (not persisted)
+// when its start_time is missing/unparseable, its title is empty, or it starts
+// more than 18 months out (a common symptom of a bad parse). This is the choke
+// point: every source flows through persistEvents, so this bans fabricated dates
+// repo-wide rather than per-scraper.
+const MAX_FUTURE_MS = 18 * 30 * 24 * 60 * 60 * 1000 // ~18 months
+
+export function isValidEvent(raw: RawEvent): boolean {
+  if (!raw.title || raw.title.trim().length === 0) return false
+  if (!raw.start_time) return false
+  const t = new Date(raw.start_time).getTime()
+  if (!Number.isFinite(t)) return false
+  if (t > Date.now() + MAX_FUTURE_MS) return false
+  return true
+}
 
 // Shared persistence pipeline used by both the scheduled ingest (/api/ingest)
-// and the on-demand importer (/api/import): tag every event (batched Gemini, or
-// keyword fallback), guarantee a themed image, then upsert with bounded
-// concurrency and attach categories. Dedup is handled by the events table's
-// UNIQUE(source, source_id) constraint.
-export async function persistEvents(events: RawEvent[]): Promise<{ inserted: number; skipped: number; total: number }> {
-  if (events.length === 0) return { inserted: 0, skipped: 0, total: 0 }
+// and the on-demand importer (/api/import): reject undateable events, tag the
+// rest (batched Gemini, or keyword fallback), guarantee a themed image, then
+// upsert with bounded concurrency and attach categories. Dedup is handled by
+// the events table's UNIQUE(source, source_id) constraint.
+export async function persistEvents(
+  input: RawEvent[]
+): Promise<{ inserted: number; skipped: number; rejected: number; total: number }> {
+  const total = input.length
+  if (total === 0) return { inserted: 0, skipped: 0, rejected: 0, total: 0 }
+
+  const events = input.filter(isValidEvent)
+  const rejected = total - events.length
+  if (events.length === 0) return { inserted: 0, skipped: 0, rejected, total }
 
   const categoryIdBySlug = await getCategoryIdBySlug()
 
@@ -48,5 +72,5 @@ export async function persistEvents(events: RawEvent[]): Promise<{ inserted: num
 
   await Promise.all(Array.from({ length: CONCURRENCY }, worker))
 
-  return { inserted, skipped, total: events.length }
+  return { inserted, skipped, rejected, total }
 }

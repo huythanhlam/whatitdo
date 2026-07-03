@@ -1,6 +1,6 @@
 import { GoogleGenAI } from '@google/genai'
-import type { RawEvent } from './scrapers/types'
-import type { FeedItem } from './scrapers/rss'
+import type { RawEvent } from './sources/types'
+import type { FeedItem } from './sources/rss'
 
 // Turns free-text feed items (newspaper articles, social posts) into structured
 // events. Newspapers and social media don't publish machine-readable event

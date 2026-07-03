@@ -75,8 +75,8 @@ re-running only applies migrations that haven't been applied yet.
 ## 3. (Optional) Add the other keys
 
 The app already works without these — events come from free sources (City of
-Austin iCal + Chronicle/Do512 scrapers) and tagging falls back to keyword
-matching. Add them when you want the upgrades:
+Austin iCal + Eventbrite, plus the Gemini crawler when a key is set) and tagging
+falls back to keyword matching. Add them when you want the upgrades:
 
 - `GEMINI_API_KEY` — smarter AI tagging **and** unlocks the newspaper + social
   media sources (local papers like KUT, Austin Monitor, Daily Texan, Eater and
