@@ -11,7 +11,10 @@ import { gridRangeIso, currentCentralMonth } from '@/lib/calendar'
 import { DateFilter } from '@/components/DateFilter'
 import type { EnrichedEvent } from '@/lib/types'
 
-export const dynamic = 'force-dynamic'
+// Content changes about once a day (the ingest cron), so serve cached HTML and
+// revalidate every 15 minutes instead of re-querying on every request. Filtered
+// views (which read searchParams) still render dynamically.
+export const revalidate = 900
 
 function first(v: string | string[] | undefined): string | undefined {
   return typeof v === 'string' ? v : Array.isArray(v) ? v[0] : undefined

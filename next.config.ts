@@ -12,17 +12,10 @@ const nextConfig: NextConfig = {
     '/*': ['supabase/migrations/**/*'],
   },
   images: {
-    remotePatterns: [
-      { protocol: 'https', hostname: '**.eventbrite.com' },
-      { protocol: 'https', hostname: '**.eventbritecdn.com' },
-      { protocol: 'https', hostname: '**.do512.com' },
-      { protocol: 'https', hostname: '**.austinchronicle.com' },
-      { protocol: 'https', hostname: 's1.ticketm.net' },
-      { protocol: 'https', hostname: '**.ticketm.net' },
-      { protocol: 'https', hostname: '**.seatgeek.com' },
-      { protocol: 'https', hostname: '**.tmol.io' },
-      { protocol: 'https', hostname: 'images.unsplash.com' },
-    ],
+    // Event images come from many third-party hosts (ticketing platforms,
+    // scraped venue pages, CDNs). Allow any https host so next/image never fails
+    // on an unlisted source; the app already renders these URLs directly.
+    remotePatterns: [{ protocol: 'https', hostname: '**' }],
   },
 };
 
