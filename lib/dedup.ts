@@ -1,23 +1,24 @@
-import { normalizeTitle } from './normalize'
-import type { RawEvent } from './sources/types'
+import { normalizeTitle, normalizeVenue } from './normalize'
+import type { RawEvent, SourceKind } from './sources/types'
 
 // Source-trust ranking for merge tiebreaks (PRODUCT-SPEC §2.2.3): api > ical >
-// jsonld > crawl. Keyed by source *name*; kinds come from the registry. Kept as a
+// jsonld > rss/crawl. Keyed by source *name*; kinds mirror the registry. Kept as a
 // small static map so the pure merge stays dependency-light and testable. Phase
 // 2B, which makes sources DB-driven, can replace this with a kind lookup.
-const KIND_BY_SOURCE: Record<string, 'api' | 'ical' | 'jsonld' | 'crawl' | 'seed'> = {
+const KIND_BY_SOURCE: Record<string, SourceKind> = {
   ticketmaster: 'api',
   seatgeek: 'api',
   youtube: 'api',
   ical: 'ical',
   eventbrite: 'jsonld',
-  newspapers: 'crawl',
+  newspapers: 'rss',
   social: 'crawl',
   crawl: 'crawl',
   seed: 'seed',
 }
 
-const TRUST_BY_KIND: Record<string, number> = { api: 4, ical: 3, jsonld: 2, crawl: 1, seed: 1 }
+// rss sits at the crawl tier: newspaper RSS is Gemini-extracted, not structured.
+const TRUST_BY_KIND: Record<string, number> = { api: 4, ical: 3, jsonld: 2, rss: 1, crawl: 1, seed: 1 }
 
 export function sourceTrust(source: string): number {
   const kind = KIND_BY_SOURCE[source]
@@ -67,6 +68,7 @@ export type FieldPatch = Partial<{
   description: string | null
   image_url: string | null
   venue_name: string | null
+  venue_norm: string | null
   venue_address: string | null
   end_time: string | null
   ticket_url: string | null
@@ -88,6 +90,8 @@ export function mergeFields(existing: ExistingEvent, incoming: RawEvent): FieldP
   if (!existing.image_url && incoming.image_url) patch.image_url = incoming.image_url
   // Fill missing nullable fields.
   if (!existing.venue_name && incoming.venue_name) patch.venue_name = incoming.venue_name
+  // Keep venue_norm in lockstep with venue_name so the dedup block index stays fresh.
+  if (patch.venue_name) patch.venue_norm = normalizeVenue(patch.venue_name)
   if (!existing.venue_address && incoming.venue_address) patch.venue_address = incoming.venue_address
   if (!existing.end_time && incoming.end_time) patch.end_time = incoming.end_time
   // Widen the price range.

@@ -8,6 +8,9 @@ describe('sourceTrust', () => {
     expect(sourceTrust('eventbrite')).toBeGreaterThan(sourceTrust('crawl'))
     expect(sourceTrust('nope')).toBe(0)
   })
+  it('puts rss (newspapers) at the same tier as crawl', () => {
+    expect(sourceTrust('newspapers')).toBe(sourceTrust('crawl')) // rss tier == crawl tier == 1
+  })
 })
 
 describe('chooseMatch', () => {
@@ -41,6 +44,10 @@ describe('mergeFields', () => {
   it('takes the longer description', () => {
     const p = mergeFields(base, { ...raw(), description: 'a much longer description' })
     expect(p?.description).toBe('a much longer description')
+  })
+  it('recomputes venue_norm when it fills a missing venue_name', () => {
+    const p = mergeFields({ ...base, venue_name: null, venue_norm: null }, { ...raw(), venue_name: 'Mohawk' })
+    expect(p).toMatchObject({ venue_name: 'Mohawk', venue_norm: 'mohawk' })
   })
   it('fills a missing image but does not overwrite an existing one', () => {
     expect(mergeFields(base, { ...raw(), image_url: 'http://img' })?.image_url).toBe('http://img')
