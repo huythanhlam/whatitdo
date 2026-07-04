@@ -3,10 +3,10 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { FeaturedBadge } from './FeaturedBadge'
 import { getTicketProvider } from '@/lib/tickets'
-import type { Event, Category } from '@/lib/supabase/types'
+import type { EnrichedEvent } from '@/lib/types'
 
 type Props = {
-  event: Event & { categories?: Category[] }
+  event: EnrichedEvent
   featured?: boolean
   featuredLabel?: string
 }

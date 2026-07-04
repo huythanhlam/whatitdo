@@ -1,5 +1,5 @@
 import { Resend } from 'resend'
-import type { Event, Category } from '@/lib/supabase/types'
+import type { Event, Category } from '@/lib/types'
 import { listSubscriptions, getEventsBetween } from '@/lib/db'
 import { escapeHtml, safeUrl } from '@/lib/html'
 import { getBaseUrl } from '@/lib/site'
