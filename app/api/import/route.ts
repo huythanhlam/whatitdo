@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { pageFromHtml } from '@/lib/scrapers/crawler'
+import { pageFromHtml } from '@/lib/sources/crawler'
 import { extractEventsFromPages, type CrawlPage } from '@/lib/extractor'
 import { persistEvents } from '@/lib/persist'
 import { isLocal } from '@/lib/db'

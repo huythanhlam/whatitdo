@@ -7,21 +7,63 @@ import { CalendarView } from '@/components/CalendarView'
 import { ViewToggle } from '@/components/ViewToggle'
 import { listEvents, countEvents } from '@/lib/db'
 import { resolveDateRange } from '@/lib/dateRanges'
+import { gridRangeIso, currentCentralMonth } from '@/lib/calendar'
 import { DateFilter } from '@/components/DateFilter'
-import type { Event, Category } from '@/lib/supabase/types'
+import type { EnrichedEvent } from '@/lib/types'
 
-type EnrichedEvent = Event & { categories?: Category[]; is_featured?: boolean; featured_label?: string | null }
-
-export const dynamic = 'force-dynamic'
+// Content changes about once a day (the ingest cron), so serve cached HTML and
+// revalidate every 15 minutes instead of re-querying on every request. Filtered
+// views (which read searchParams) still render dynamically.
+export const revalidate = 900
 
 function first(v: string | string[] | undefined): string | undefined {
   return typeof v === 'string' ? v : Array.isArray(v) ? v[0] : undefined
 }
 
+function toCategories(cats: string | string[] | undefined): string[] {
+  return cats ? (typeof cats === 'string' ? [cats] : cats) : []
+}
+
+// The calendar's visible month is URL state (?cal=YYYY-MM, 1-indexed); default
+// to the current Central-time month.
+function parseCalMonth(cal: string | undefined): { year: number; month: number } {
+  const m = cal ? /^(\d{4})-(\d{2})$/.exec(cal) : null
+  if (m) {
+    const year = +m[1]
+    const month = +m[2] - 1
+    if (month >= 0 && month <= 11) return { year, month }
+  }
+  return currentCentralMonth()
+}
+
+// Server-fetch the visible month window and hand it to the (now server-rendered)
+// calendar — matching the app's RSC-with-direct-DB pattern instead of a client
+// useEffect fetch of up to 1000 events.
+async function CalendarLoader({ searchParams }: { searchParams: Record<string, string | string[]> }) {
+  const q = first(searchParams.q) ?? ''
+  const categories = toCategories(searchParams.category)
+  const { year, month } = parseCalMonth(first(searchParams.cal))
+  const { fromIso, toIso } = gridRangeIso(year, month)
+
+  const events = await listEvents({ q, categories, from: fromIso, to: toIso, limit: 1000, offset: 0 })
+
+  const qs = new URLSearchParams()
+  if (q) qs.set('q', q)
+  categories.forEach(c => qs.append('category', c))
+
+  return (
+    <CalendarView
+      events={events as unknown as EnrichedEvent[]}
+      year={year}
+      month={month}
+      filterQs={qs.toString()}
+    />
+  )
+}
+
 async function EventsLoader({ searchParams }: { searchParams: Record<string, string | string[]> }) {
   const q = first(searchParams.q) ?? ''
-  const cats = searchParams.category
-  const categories = cats ? (typeof cats === 'string' ? [cats] : cats) : []
+  const categories = toCategories(searchParams.category)
 
   const range = resolveDateRange({
     when: first(searchParams.when),
@@ -110,7 +152,7 @@ export default async function HomePage({
 
           {view === 'calendar' ? (
             <Suspense fallback={<div className="h-96 bg-slate-100 rounded-lg animate-pulse" />}>
-              <CalendarView />
+              <CalendarLoader searchParams={params} />
             </Suspense>
           ) : (
             <>

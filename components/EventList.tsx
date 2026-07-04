@@ -1,9 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { EventGrid } from './EventGrid'
-import type { Event, Category } from '@/lib/supabase/types'
-
-type EnrichedEvent = Event & { categories?: Category[]; is_featured?: boolean; featured_label?: string | null }
+import type { EnrichedEvent } from '@/lib/types'
 
 const PAGE_SIZE = 24
 

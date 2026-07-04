@@ -1,8 +1,5 @@
 import { EventCard } from './EventCard'
-import { AdSlot } from './AdSlot'
-import type { Event, Category } from '@/lib/supabase/types'
-
-type EnrichedEvent = Event & { categories?: Category[]; is_featured?: boolean; featured_label?: string | null }
+import type { EnrichedEvent } from '@/lib/types'
 
 export function EventGrid({ events }: { events: EnrichedEvent[] }) {
   if (events.length === 0) {
@@ -15,25 +12,16 @@ export function EventGrid({ events }: { events: EnrichedEvent[] }) {
     )
   }
 
-  const items: React.ReactNode[] = []
-
-  events.forEach((event, i) => {
-    items.push(
-      <EventCard
-        key={event.id}
-        event={event}
-        featured={event.is_featured}
-        featuredLabel={event.featured_label ?? undefined}
-      />
-    )
-    if ((i + 1) % 8 === 0 && i < events.length - 1) {
-      items.push(<AdSlot key={`ad-${i}`} slot={`grid-${Math.floor(i / 8)}`} />)
-    }
-  })
-
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      {items}
+      {events.map(event => (
+        <EventCard
+          key={event.id}
+          event={event}
+          featured={event.is_featured}
+          featuredLabel={event.featured_label ?? undefined}
+        />
+      ))}
     </div>
   )
 }

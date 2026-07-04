@@ -1,6 +1,6 @@
-import { GoogleGenAI } from '@google/genai'
-import type { RawEvent } from './scrapers/types'
-import type { FeedItem } from './scrapers/rss'
+import { geminiJson, mapPool, hasGemini } from './gemini'
+import type { RawEvent } from './sources/types'
+import type { FeedItem } from './sources/rss'
 
 // Turns free-text feed items (newspaper articles, social posts) into structured
 // events. Newspapers and social media don't publish machine-readable event
@@ -10,9 +10,6 @@ import type { FeedItem } from './scrapers/rss'
 // roundups, or undated are rejected. Without a GEMINI_API_KEY no reliable
 // extraction is possible, so we contribute nothing rather than polluting the
 // database with article headlines masquerading as events.
-
-const apiKey = process.env.GEMINI_API_KEY
-const ai = apiKey ? new GoogleGenAI({ apiKey }) : null
 
 // Items per Gemini request. Smaller than the tagger's batch because each item
 // carries more text and the model returns a richer object per item.
@@ -157,62 +154,34 @@ JSON:`
 }
 
 async function extractBatch(items: FeedItem[], nowIso: string): Promise<RawEvent[]> {
-  try {
-    const response = await ai!.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: buildPrompt(items, nowIso),
-      config: { maxOutputTokens: 4096, temperature: 0 },
-    })
-
-    const text = (response.text ?? '')
-      .trim()
-      .replace(/^```(?:json)?\s*/i, '')
-      .replace(/\s*```$/, '')
-      .trim()
-
-    const parsed = JSON.parse(text) as Record<string, ExtractedEvent>
-    const out: RawEvent[] = []
-    items.forEach((it, i) => {
-      const ev = buildEvent(it, parsed[String(i)], nowIso)
-      if (ev) out.push(ev)
-    })
-    return out
-  } catch (e) {
-    // A failed batch yields no events rather than guessing — keeps the DB clean.
-    console.error('Event extraction batch failed:', e)
-    return []
-  }
+  // A null result (no key / budget exhausted / parse failure) yields no events
+  // rather than guessing — keeps the DB clean.
+  const parsed = await geminiJson<Record<string, ExtractedEvent>>({
+    prompt: buildPrompt(items, nowIso),
+    maxOutputTokens: 4096,
+  })
+  if (!parsed) return []
+  const out: RawEvent[] = []
+  items.forEach((it, i) => {
+    const ev = buildEvent(it, parsed[String(i)], nowIso)
+    if (ev) out.push(ev)
+  })
+  return out
 }
 
 // Extract structured events from a list of feed items. Returns [] when no
 // Gemini key is configured (no reliable way to detect/date events without it).
 export async function extractEvents(items: FeedItem[]): Promise<RawEvent[]> {
-  if (items.length === 0) return []
-  if (!ai) {
-    console.warn('GEMINI_API_KEY not set — skipping newspaper/social event extraction')
-    return []
-  }
+  if (items.length === 0 || !hasGemini()) return []
 
   const nowIso = new Date().toISOString()
-
   const batches: FeedItem[][] = []
   for (let i = 0; i < items.length; i += BATCH_SIZE) {
     batches.push(items.slice(i, i + BATCH_SIZE))
   }
 
-  const CONCURRENCY = 3
-  let cursor = 0
-  const collected: RawEvent[] = []
-  async function worker() {
-    while (cursor < batches.length) {
-      const batch = batches[cursor++]
-      const events = await extractBatch(batch, nowIso)
-      collected.push(...events)
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, batches.length) }, worker))
-
-  return dedupeEvents(collected)
+  const results = await mapPool(batches, 3, batch => extractBatch(batch, nowIso))
+  return dedupeEvents(results.flat())
 }
 
 // ---------------------------------------------------------------------------
@@ -283,45 +252,15 @@ ${page.text.slice(0, PAGE_TEXT_CAP)}
 
 JSON array:`
 
-  try {
-    const response = await ai!.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: { maxOutputTokens: 8192, temperature: 0 },
-    })
-    const text = (response.text ?? '')
-      .trim()
-      .replace(/^```(?:json)?\s*/i, '')
-      .replace(/\s*```$/, '')
-      .trim()
-    const parsed = JSON.parse(text)
-    if (!Array.isArray(parsed)) return []
-    return buildEventsFromPage(page, parsed as ExtractedEvent[], nowIso)
-  } catch (e) {
-    console.error(`Page extraction failed for ${page.url}:`, e)
-    return []
-  }
+  const parsed = await geminiJson<ExtractedEvent[]>({ prompt, maxOutputTokens: 8192 })
+  if (!Array.isArray(parsed)) return []
+  return buildEventsFromPage(page, parsed, nowIso)
 }
 
 // Extract events from one or more crawled pages. Returns [] with no Gemini key.
 export async function extractEventsFromPages(pages: CrawlPage[]): Promise<RawEvent[]> {
-  if (pages.length === 0) return []
-  if (!ai) {
-    console.warn('GEMINI_API_KEY not set — skipping page crawl extraction')
-    return []
-  }
+  if (pages.length === 0 || !hasGemini()) return []
   const nowIso = new Date().toISOString()
-
-  const CONCURRENCY = 3
-  let cursor = 0
-  const collected: RawEvent[] = []
-  async function worker() {
-    while (cursor < pages.length) {
-      const page = pages[cursor++]
-      collected.push(...(await extractPage(page, nowIso)))
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, pages.length) }, worker))
-
-  return dedupeEvents(collected)
+  const results = await mapPool(pages, 3, page => extractPage(page, nowIso))
+  return dedupeEvents(results.flat())
 }

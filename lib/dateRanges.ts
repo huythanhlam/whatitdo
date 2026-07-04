@@ -64,7 +64,6 @@ export function resolveDateRange(params: {
   }
 
   const { y, m, d, weekday } = partsInTz(now, TZ)
-  const startOfToday = zonedToUtc(y, m, d, 0, 0, 0, TZ).toISOString()
   const endOfToday = zonedToUtc(y, m, d, 23, 59, 59, TZ).toISOString()
 
   switch (params.when) {
@@ -89,7 +88,6 @@ export function resolveDateRange(params: {
       return { fromIso: nowIso, toIso: end, label: 'This Month', active: true }
     }
     default:
-      void startOfToday
       return { fromIso: nowIso, toIso: null, label: null, active: false }
   }
 }

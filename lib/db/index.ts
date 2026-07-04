@@ -1,7 +1,7 @@
 import type { Db } from './driver'
 import { getPgDb } from './pg'
 import { getPgliteDb } from './pglite'
-import type { RawEvent } from '@/lib/scrapers/types'
+import type { RawEvent } from '@/lib/sources/types'
 
 // Returns true when no direct Postgres connection is configured — the app then
 // runs against an embedded local Postgres (PGlite) so it works with zero
@@ -51,6 +51,14 @@ const FEATURED_JSON = `COALESCE((
   FROM featured_listings f WHERE f.event_id = e.id
 ), '[]'::json) AS featured_listings`
 
+// Full-text search over title + description + venue, matching the expression of
+// the GIN index in migration 001 so it uses that index instead of a sequential
+// ILIKE scan. websearch_to_tsquery accepts natural query syntax ("live music",
+// quoted phrases, -exclusions) and is null-safe on empty input.
+const FTS_MATCH = `to_tsvector('english',
+  coalesce(e.title,'') || ' ' || coalesce(e.description,'') || ' ' || coalesce(e.venue_name,'')
+) @@ websearch_to_tsquery('english', $PARAM)`
+
 // ---------------------------------------------------------------------------
 // listEvents
 // ---------------------------------------------------------------------------
@@ -74,8 +82,8 @@ export async function listEvents(opts: {
     where += ` AND e.start_time <= $${params.length}`
   }
   if (opts.q) {
-    params.push(`%${opts.q}%`)
-    where += ` AND e.title ILIKE $${params.length}`
+    params.push(opts.q)
+    where += ` AND ${FTS_MATCH.replace('$PARAM', `$${params.length}`)}`
   }
   if (opts.categories && opts.categories.length > 0) {
     params.push(opts.categories)
@@ -114,7 +122,7 @@ export async function countEvents(opts: {
   const params: unknown[] = [fromIso]
   let where = 'e.start_time >= $1'
   if (opts.to) { params.push(opts.to); where += ` AND e.start_time <= $${params.length}` }
-  if (opts.q) { params.push(`%${opts.q}%`); where += ` AND e.title ILIKE $${params.length}` }
+  if (opts.q) { params.push(opts.q); where += ` AND ${FTS_MATCH.replace('$PARAM', `$${params.length}`)}` }
   if (opts.categories && opts.categories.length > 0) {
     params.push(opts.categories)
     where += ` AND e.id IN (SELECT ec.event_id FROM event_categories ec
@@ -231,6 +239,70 @@ export async function addFeatured(f: {
     [f.event_id, f.starts_at, f.ends_at, f.ad_label]
   )
   return rows[0] ?? null
+}
+
+// ---------------------------------------------------------------------------
+// Source runs — the observability ledger (one row per source per ingest run)
+// ---------------------------------------------------------------------------
+export type SourceRun = {
+  id: number
+  source: string
+  started_at: string
+  finished_at: string | null
+  status: 'running' | 'ok' | 'error' | 'skipped'
+  events_found: number
+  events_upserted: number
+  events_rejected: number
+  gemini_requests: number
+  error: string | null
+}
+
+// Open a run (status 'running'); returns its id so the orchestrator can close
+// it with the final counts once the source finishes.
+export async function startSourceRun(source: string): Promise<number> {
+  const db = await getDb()
+  const rows = await db.query<{ id: number }>(
+    `INSERT INTO source_runs (source, status) VALUES ($1, 'running') RETURNING id`,
+    [source]
+  )
+  return rows[0].id
+}
+
+export async function finishSourceRun(
+  id: number,
+  fields: {
+    status: 'ok' | 'error' | 'skipped'
+    events_found?: number
+    events_upserted?: number
+    events_rejected?: number
+    gemini_requests?: number
+    error?: string | null
+  }
+): Promise<void> {
+  const db = await getDb()
+  await db.query(
+    `UPDATE source_runs SET
+       finished_at = NOW(), status = $2,
+       events_found = $3, events_upserted = $4, events_rejected = $5,
+       gemini_requests = $6, error = $7
+     WHERE id = $1`,
+    [id, fields.status, fields.events_found ?? 0, fields.events_upserted ?? 0,
+     fields.events_rejected ?? 0, fields.gemini_requests ?? 0, fields.error ?? null]
+  )
+}
+
+// The most recent `perSource` runs for each source, newest first — the raw
+// material for /api/admin/health's staleness check.
+export async function recentSourceRuns(perSource: number): Promise<SourceRun[]> {
+  const db = await getDb()
+  return db.query<SourceRun>(
+    `SELECT * FROM (
+       SELECT sr.*, ROW_NUMBER() OVER (PARTITION BY source ORDER BY started_at DESC) AS rn
+       FROM source_runs sr
+     ) t WHERE rn <= $1
+     ORDER BY source ASC, started_at DESC`,
+    [perSource]
+  )
 }
 
 // ---------------------------------------------------------------------------
