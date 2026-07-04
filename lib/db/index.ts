@@ -1,7 +1,7 @@
 import type { Db } from './driver'
 import { getPgDb } from './pg'
 import { getPgliteDb } from './pglite'
-import type { RawEvent } from '@/lib/scrapers/types'
+import type { RawEvent } from '@/lib/sources/types'
 
 // Returns true when no direct Postgres connection is configured — the app then
 // runs against an embedded local Postgres (PGlite) so it works with zero
@@ -231,6 +231,70 @@ export async function addFeatured(f: {
     [f.event_id, f.starts_at, f.ends_at, f.ad_label]
   )
   return rows[0] ?? null
+}
+
+// ---------------------------------------------------------------------------
+// Source runs — the observability ledger (one row per source per ingest run)
+// ---------------------------------------------------------------------------
+export type SourceRun = {
+  id: number
+  source: string
+  started_at: string
+  finished_at: string | null
+  status: 'running' | 'ok' | 'error' | 'skipped'
+  events_found: number
+  events_upserted: number
+  events_rejected: number
+  gemini_requests: number
+  error: string | null
+}
+
+// Open a run (status 'running'); returns its id so the orchestrator can close
+// it with the final counts once the source finishes.
+export async function startSourceRun(source: string): Promise<number> {
+  const db = await getDb()
+  const rows = await db.query<{ id: number }>(
+    `INSERT INTO source_runs (source, status) VALUES ($1, 'running') RETURNING id`,
+    [source]
+  )
+  return rows[0].id
+}
+
+export async function finishSourceRun(
+  id: number,
+  fields: {
+    status: 'ok' | 'error' | 'skipped'
+    events_found?: number
+    events_upserted?: number
+    events_rejected?: number
+    gemini_requests?: number
+    error?: string | null
+  }
+): Promise<void> {
+  const db = await getDb()
+  await db.query(
+    `UPDATE source_runs SET
+       finished_at = NOW(), status = $2,
+       events_found = $3, events_upserted = $4, events_rejected = $5,
+       gemini_requests = $6, error = $7
+     WHERE id = $1`,
+    [id, fields.status, fields.events_found ?? 0, fields.events_upserted ?? 0,
+     fields.events_rejected ?? 0, fields.gemini_requests ?? 0, fields.error ?? null]
+  )
+}
+
+// The most recent `perSource` runs for each source, newest first — the raw
+// material for /api/admin/health's staleness check.
+export async function recentSourceRuns(perSource: number): Promise<SourceRun[]> {
+  const db = await getDb()
+  return db.query<SourceRun>(
+    `SELECT * FROM (
+       SELECT sr.*, ROW_NUMBER() OVER (PARTITION BY source ORDER BY started_at DESC) AS rn
+       FROM source_runs sr
+     ) t WHERE rn <= $1
+     ORDER BY source ASC, started_at DESC`,
+    [perSource]
+  )
 }
 
 // ---------------------------------------------------------------------------
