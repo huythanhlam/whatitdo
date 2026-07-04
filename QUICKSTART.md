@@ -52,19 +52,25 @@ For a real deployment with a persistent database and live email, do the below.
 ## 1. Create the database (required)
 
 1. Go to [supabase.com/dashboard](https://supabase.com/dashboard) → **New project** (free tier is fine).
-2. When it's ready, open **Settings → API** and copy:
-   - **Project URL** → `NEXT_PUBLIC_SUPABASE_URL`
-   - **anon public** key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - **service_role** key → `SUPABASE_SERVICE_ROLE_KEY`
-3. Paste all three into [`.env.local`](.env.local).
+2. When it's ready, open **Settings → Database → Connection pooling** and copy the
+   **URI** (the Supavisor pooler connection string) → `DATABASE_URL`.
+3. Paste it into [`.env.local`](.env.local).
+
+> Skip this whole file if you just want to try the app: with no `DATABASE_URL`
+> set, it runs on an embedded PGlite database with seed data and zero credentials.
 
 ## 2. Create the tables (required)
 
-In the Supabase dashboard → **SQL Editor** → **New query**, paste the entire
-contents of [`supabase/all_migrations.sql`](supabase/all_migrations.sql) and click **Run**.
+Apply the migrations to your Supabase database:
 
-This creates the `events`, `categories`, `subscriptions`, and `featured_listings`
-tables, plus the full-text search index and row-level-security policies.
+```bash
+npm run migrate
+```
+
+This runs every file in `supabase/migrations/` against `DATABASE_URL`, creating
+the `events`, `categories`, `subscriptions`, and `featured_listings` tables, plus
+the full-text search index and row-level-security policies. It is idempotent —
+re-running only applies migrations that haven't been applied yet.
 
 ## 3. (Optional) Add the other keys
 

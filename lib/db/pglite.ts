@@ -1,95 +1,61 @@
 import { PGlite } from '@electric-sql/pglite'
-import { CATEGORIES } from '@/lib/categories'
 import { fetchSeedEvents } from '@/lib/scrapers/seed'
 import { tagByKeyword } from '@/lib/tagger'
 import { imageForCategories } from '@/lib/images'
+import type { Db } from './driver'
+import { migrate } from './migrate'
 
 // Embedded in-memory Postgres for zero-credential local development, and the
-// default store in production when no Supabase project is configured. Activated
-// automatically by lib/db. Because PGlite is in-memory and per-instance on
-// serverless (on-disk persistence is avoided — its Node filesystem driver throws
-// on this runtime), each fresh instance MUST be self-sufficient: init() seeds
-// both the categories AND a baseline set of real Austin events so every page
+// default store in production when no DATABASE_URL is configured. Because PGlite
+// is in-memory and per-instance on serverless (its on-disk driver throws on this
+// runtime), each fresh instance MUST be self-sufficient: init() applies the
+// shared migrations AND seeds a baseline set of real Austin events so every page
 // load has data immediately, without depending on the daily /api/ingest cron
-// (which would only populate one ephemeral instance's memory). Live sources
-// still supplement this baseline via POST /api/ingest within an instance's life.
+// (which would only populate one ephemeral instance's memory).
 //
 // Stored on globalThis: Next.js bundles route handlers and RSC pages into
 // separate module registries, so a plain module-level singleton would create a
 // *separate* PGlite instance per bundle — and instances don't share data.
-// globalThis is shared across all bundles in the Node process, guaranteeing a
-// single shared database for both writes (ingest) and reads (pages/APIs).
-const globalForPglite = globalThis as unknown as { __pglite?: Promise<PGlite> }
+const globalForPglite = globalThis as unknown as { __pgliteDb?: Promise<Db> }
 
-async function init(): Promise<PGlite> {
-  const db = new PGlite()
+// Supabase provides these objects natively; PGlite does not. Synthesizing them
+// here lets the *unmodified* Supabase migrations (which reference the `auth`
+// schema, the API roles, and pgcrypto's gen_random_bytes) run verbatim on
+// PGlite, so there is exactly one schema for both drivers. Applied to PGlite
+// only — never to real Postgres.
+const PREAMBLE = `
+DO $$ BEGIN CREATE ROLE service_role;  EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE ROLE anon;          EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE ROLE authenticated;  EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+CREATE SCHEMA IF NOT EXISTS auth;
+CREATE OR REPLACE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $fn$ SELECT 'service_role'::text $fn$;
+CREATE OR REPLACE FUNCTION auth.uid()  RETURNS uuid LANGUAGE sql STABLE AS $fn$ SELECT NULL::uuid $fn$;
+CREATE TABLE IF NOT EXISTS auth.users (id uuid PRIMARY KEY);
+-- pgcrypto is unavailable in PGlite; the subscriptions token default references
+-- gen_random_bytes. The app always supplies the token explicitly, so this shim
+-- only needs to let CREATE TABLE resolve the default expression.
+CREATE OR REPLACE FUNCTION gen_random_bytes(n integer) RETURNS bytea LANGUAGE sql VOLATILE AS $fn$
+  SELECT decode(string_agg(lpad(to_hex((random() * 255)::int), 2, '0'), ''), 'hex')
+  FROM generate_series(1, GREATEST(n, 1))
+$fn$;
+`
 
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS categories (
-      id   SERIAL PRIMARY KEY,
-      slug TEXT UNIQUE NOT NULL,
-      name TEXT NOT NULL,
-      color TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS events (
-      id            TEXT PRIMARY KEY,
-      title         TEXT NOT NULL,
-      description   TEXT,
-      start_time    TIMESTAMPTZ NOT NULL,
-      end_time      TIMESTAMPTZ,
-      venue_name    TEXT,
-      venue_address TEXT,
-      image_url     TEXT,
-      ticket_url    TEXT,
-      source        TEXT NOT NULL,
-      source_id     TEXT,
-      is_free       BOOLEAN DEFAULT false,
-      price_min     NUMERIC(10,2),
-      price_max     NUMERIC(10,2),
-      created_at    TIMESTAMPTZ DEFAULT NOW(),
-      updated_at    TIMESTAMPTZ DEFAULT NOW(),
-      UNIQUE(source, source_id)
-    );
-
-    CREATE TABLE IF NOT EXISTS event_categories (
-      event_id    TEXT REFERENCES events(id) ON DELETE CASCADE,
-      category_id INTEGER REFERENCES categories(id) ON DELETE CASCADE,
-      PRIMARY KEY (event_id, category_id)
-    );
-
-    CREATE TABLE IF NOT EXISTS subscriptions (
-      id             TEXT PRIMARY KEY,
-      email          TEXT UNIQUE NOT NULL,
-      user_id        TEXT,
-      frequency      TEXT NOT NULL DEFAULT 'daily',
-      category_slugs TEXT[] DEFAULT '{}',
-      token          TEXT UNIQUE NOT NULL,
-      confirmed      BOOLEAN DEFAULT false,
-      created_at     TIMESTAMPTZ DEFAULT NOW()
-    );
-
-    CREATE TABLE IF NOT EXISTS featured_listings (
-      id          TEXT PRIMARY KEY,
-      event_id    TEXT REFERENCES events(id) ON DELETE CASCADE,
-      starts_at   TIMESTAMPTZ NOT NULL,
-      ends_at     TIMESTAMPTZ NOT NULL,
-      ad_label    TEXT DEFAULT 'Featured',
-      created_at  TIMESTAMPTZ DEFAULT NOW()
-    );
-  `)
-
-  // Seed categories (idempotent)
-  for (const c of CATEGORIES) {
-    await db.query(
-      `INSERT INTO categories (slug, name, color) VALUES ($1, $2, $3)
-       ON CONFLICT (slug) DO NOTHING`,
-      [c.slug, c.name, c.color]
-    )
+function wrap(pg: PGlite): Db {
+  return {
+    query: async <T = Record<string, unknown>>(sql: string, params?: unknown[]) =>
+      (await pg.query<T>(sql, params as unknown[])).rows,
+    exec: async (sql: string) => {
+      await pg.exec(sql)
+    },
   }
+}
 
+async function init(): Promise<Db> {
+  const pg = new PGlite()
+  await pg.exec(PREAMBLE)
+  const db = wrap(pg)
+  await migrate(db)
   await seedBaselineEvents(db)
-
   return db
 }
 
@@ -97,29 +63,28 @@ async function init(): Promise<PGlite> {
 // deterministic seed source with keyword-based category tagging (no API calls)
 // and category-themed fallback images. Idempotent via ON CONFLICT so a re-run of
 // init() or a later ingest won't duplicate rows.
-async function seedBaselineEvents(db: PGlite): Promise<void> {
+async function seedBaselineEvents(db: Db): Promise<void> {
   const slugToId = new Map<string, number>()
   const cats = await db.query<{ id: number; slug: string }>(`SELECT id, slug FROM categories`)
-  for (const c of cats.rows) slugToId.set(c.slug, c.id)
+  for (const c of cats) slugToId.set(c.slug, c.id)
 
   const events = await fetchSeedEvents()
 
   for (const raw of events) {
     const slugs = tagByKeyword(raw.title, raw.description)
     const imageUrl = raw.image_url ?? imageForCategories(slugs)
-    const id = crypto.randomUUID()
 
     const res = await db.query<{ id: string }>(
-      `INSERT INTO events (id, title, description, start_time, end_time, venue_name,
+      `INSERT INTO events (title, description, start_time, end_time, venue_name,
         venue_address, image_url, ticket_url, source, source_id, is_free, price_min, price_max, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14, NOW())
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, NOW())
        ON CONFLICT (source, source_id) DO NOTHING
        RETURNING id`,
-      [id, raw.title, raw.description, raw.start_time, raw.end_time, raw.venue_name,
+      [raw.title, raw.description, raw.start_time, raw.end_time, raw.venue_name,
        raw.venue_address, imageUrl, raw.ticket_url, raw.source, raw.source_id,
        raw.is_free, raw.price_min, raw.price_max]
     )
-    const eventId = res.rows[0]?.id
+    const eventId = res[0]?.id
     if (!eventId) continue
 
     for (const slug of slugs) {
@@ -133,7 +98,7 @@ async function seedBaselineEvents(db: PGlite): Promise<void> {
   }
 }
 
-export function getPglite(): Promise<PGlite> {
-  if (!globalForPglite.__pglite) globalForPglite.__pglite = init()
-  return globalForPglite.__pglite
+export function getPgliteDb(): Promise<Db> {
+  if (!globalForPglite.__pgliteDb) globalForPglite.__pgliteDb = init()
+  return globalForPglite.__pgliteDb
 }
