@@ -15,6 +15,13 @@ describe('normalizeTitle', () => {
   it('lowercases and strips punctuation', () => {
     expect(normalizeTitle('Live Music: The Black Angels!')).toBe('the black angels')
   })
+  it('strips a known section label ("Comedy: ...")', () => {
+    expect(normalizeTitle('Comedy: John Mulaney')).toBe('john mulaney')
+  })
+  it('does NOT strip a distinctive first word before a colon', () => {
+    expect(normalizeTitle('Jazz: A History')).toBe('jazz a history')
+    expect(normalizeTitle('Blues: A Legacy of Sound')).toBe('blues a legacy of sound')
+  })
   it('strips a leading "X presents" promoter prefix', () => {
     expect(normalizeTitle('C3 Presents The Black Angels')).toBe('the black angels')
   })
