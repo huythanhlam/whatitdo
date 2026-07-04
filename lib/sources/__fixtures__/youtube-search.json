@@ -1,0 +1,33 @@
+{
+  "kind": "youtube#searchListResponse",
+  "items": [
+    {
+      "id": { "kind": "youtube#video", "videoId": "abc123XYZ" },
+      "snippet": {
+        "title": "Austin City Limits Music Festival 2026 Lineup Reveal",
+        "description": "The full ACL lineup is here — headliners announced for October at Zilker Park.",
+        "publishedAt": "2026-06-25T17:30:00Z",
+        "channelTitle": "ACL Festival",
+        "thumbnails": {
+          "high": { "url": "https://i.ytimg.com/vi/abc123XYZ/hqdefault.jpg" },
+          "default": { "url": "https://i.ytimg.com/vi/abc123XYZ/default.jpg" }
+        }
+      }
+    },
+    {
+      "id": { "kind": "youtube#channel" },
+      "snippet": {
+        "title": "A channel result with no videoId",
+        "publishedAt": "2026-06-24T00:00:00Z",
+        "channelTitle": "Some Channel"
+      }
+    },
+    {
+      "id": { "kind": "youtube#video", "videoId": "noTitle99" },
+      "snippet": {
+        "publishedAt": "2026-06-23T00:00:00Z",
+        "channelTitle": "No Title Channel"
+      }
+    }
+  ]
+}
