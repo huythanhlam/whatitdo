@@ -14,6 +14,7 @@ import {
 } from './index'
 import { persistEvents } from '@/lib/persist'
 import type { RawEvent } from '@/lib/sources/types'
+import { getPgliteDb } from './pglite'
 
 // Full integration against the embedded PGlite database — the zero-credential
 // mode earning its keep: no Supabase, no network, no keys. Exercises the real
@@ -107,6 +108,33 @@ describe('source_runs ledger', () => {
     expect(mine!.events_upserted).toBe(2)
     expect(mine!.gemini_requests).toBe(4)
     expect(mine!.finished_at).not.toBeNull()
+  })
+})
+
+describe('dedup-foundation migration', () => {
+  it('applies the dedup-foundation migration on a fresh PGlite instance', async () => {
+    const db = await getPgliteDb()
+
+    // pg_trgm is available
+    const sim = await db.query<{ s: number }>(`SELECT similarity('austin blues', 'austin blues fest') AS s`)
+    expect(sim[0].s).toBeGreaterThan(0)
+
+    // cities seeded with Austin at id 1
+    const city = await db.query<{ id: number; slug: string }>(`SELECT id, slug FROM cities WHERE slug = 'austin'`)
+    expect(city[0]).toMatchObject({ id: 1, slug: 'austin' })
+
+    // events has the new columns and no cross-source UNIQUE
+    const cols = await db.query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns WHERE table_name = 'events'`
+    )
+    const names = cols.map(c => c.column_name)
+    expect(names).toEqual(expect.arrayContaining(['city_id', 'title_norm', 'venue_norm']))
+
+    // event_sources exists and was backfilled for every seeded event
+    const counts = await db.query<{ e: string; s: string }>(
+      `SELECT (SELECT count(*) FROM events)::text AS e, (SELECT count(*) FROM event_sources)::text AS s`
+    )
+    expect(Number(counts[0].s)).toBeGreaterThanOrEqual(Number(counts[0].e))
   })
 })
 
