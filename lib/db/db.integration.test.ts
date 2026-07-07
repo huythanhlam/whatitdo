@@ -295,6 +295,24 @@ describe('source queries (Phase 2B)', () => {
   })
 })
 
+describe('Austin venue sources (migration 010)', () => {
+  it('seeds a substantial set of enabled crawl/ical venue sources', async () => {
+    const db = await getPgliteDb()
+    const rows = await db.query<{ n: string }>(
+      `SELECT COUNT(*)::text AS n FROM sources WHERE notes = 'venue' AND enabled = true`
+    )
+    expect(parseInt(rows[0].n, 10)).toBeGreaterThanOrEqual(40)
+  })
+
+  it('keeps every source name unique', async () => {
+    const db = await getPgliteDb()
+    const dupes = await db.query<{ name: string }>(
+      `SELECT name FROM sources GROUP BY name HAVING COUNT(*) > 1`
+    )
+    expect(dupes).toEqual([])
+  })
+})
+
 function mk(overrides: Partial<RawEvent>): RawEvent {
   return {
     title: 'Integration Test Show',
