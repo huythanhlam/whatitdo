@@ -22,6 +22,8 @@ import {
   getSourceContentHash,
   setSourceContentHash,
   touchSourceSuccess,
+  listPendingEvents,
+  setEventStatus,
 } from './index'
 import { persistEvents } from '@/lib/persist'
 import type { RawEvent } from '@/lib/sources/types'
@@ -310,6 +312,74 @@ describe('Austin venue sources (migration 010)', () => {
       `SELECT name FROM sources GROUP BY name HAVING COUNT(*) > 1`
     )
     expect(dupes).toEqual([])
+  })
+})
+
+describe('event status (migration 011)', () => {
+  it('defaults seeded/ingested events to approved and hides pending from public reads', async () => {
+    const db = await getPgliteDb()
+    // Existing seed rows are all approved.
+    const seededPending = await db.query<{ n: string }>(
+      `SELECT COUNT(*)::text AS n FROM events WHERE status <> 'approved'`
+    )
+    expect(parseInt(seededPending[0].n, 10)).toBe(0)
+
+    // A pending insert is invisible to the public list/count.
+    const soon = new Date(Date.now() + 6 * 24 * 3600 * 1000).toISOString()
+    const raw = mk({ title: 'Pending Only Show', source: 'submission', source_id: 'pend-1', start_time: soon })
+    const id = await insertEvent(raw, {
+      cityId: 1, titleNorm: normalizeTitle(raw.title, raw.venue_name), venueNorm: normalizeVenue(raw.venue_name),
+      status: 'pending',
+    })
+    expect(id).toBeTruthy()
+    const listed = await listEvents({ q: 'Pending Only Show', limit: 10, offset: 0 })
+    expect(listed.some(e => e.id === id)).toBe(false)
+    const detail = await getEvent(id)
+    expect(detail).toBeNull()
+  })
+})
+
+describe('persistEvents pending submissions (Phase 2C)', () => {
+  it('lands a new submission as pending, hidden from public list', async () => {
+    const soon = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString()
+    const sub = mk({ title: 'Backyard Taco Popup', source: 'submission', source_id: 'sub-taco-1', venue_name: 'Someone Yard', start_time: soon })
+    const res = await persistEvents([sub], { status: 'pending' })
+    expect(res.inserted).toBe(1)
+
+    const listed = await listEvents({ q: 'Backyard Taco Popup', limit: 10, offset: 0 })
+    expect(listed.length).toBe(0)
+  })
+
+  it('a pending submission that matches an approved event does not downgrade it', async () => {
+    const soon = new Date(Date.now() + 8 * 24 * 3600 * 1000).toISOString()
+    const approved = mk({ title: 'Downgrade Test Fest', source: 'crawl', source_id: 'dt-approved', venue_name: 'Mohawk', start_time: soon })
+    await persistEvents([approved]) // default approved
+    const dup = mk({ title: 'Downgrade Test Fest', source: 'submission', source_id: 'dt-sub', venue_name: 'Mohawk', start_time: soon })
+    await persistEvents([dup], { status: 'pending' })
+
+    // Still visible publicly (approved event unchanged), exactly one canonical row.
+    const listed = await listEvents({ q: 'Downgrade Test Fest', limit: 10, offset: 0 })
+    expect(listed.length).toBe(1)
+  })
+})
+
+describe('admin moderation queries (Phase 2C)', () => {
+  it('lists pending events and approving one makes it public', async () => {
+    const soon = new Date(Date.now() + 9 * 24 * 3600 * 1000).toISOString()
+    await persistEvents(
+      [mk({ title: 'Moderate Me Meetup', source: 'submission', source_id: 'mod-1', start_time: soon })],
+      { status: 'pending' }
+    )
+
+    const pending = await listPendingEvents(50)
+    const mine = pending.find(p => p.source_id === 'mod-1')
+    expect(mine).toBeTruthy()
+    expect(await listEvents({ q: 'Moderate Me Meetup', limit: 10, offset: 0 })).toHaveLength(0)
+
+    await setEventStatus(mine!.id, 'approved')
+    expect(await listEvents({ q: 'Moderate Me Meetup', limit: 10, offset: 0 })).toHaveLength(1)
+    // No longer in the pending queue.
+    expect((await listPendingEvents(50)).some(p => p.source_id === 'mod-1')).toBe(false)
   })
 })
 
