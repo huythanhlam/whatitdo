@@ -1,6 +1,8 @@
 import * as cheerio from 'cheerio'
 import { extractEventsFromPages, type CrawlPage } from '@/lib/extractor'
-import type { RawEvent } from './types'
+import type { RawEvent, SourceRow, SourceContext } from './types'
+import { hashPageText } from './content-hash'
+import { getSourceContentHash, setSourceContentHash } from '@/lib/db'
 
 // Generic page crawler for influencer posts and social-media aggregator pages
 // that share events (link-in-bio pages, "things to do in Austin" roundups, etc.).
@@ -186,4 +188,35 @@ export async function fetchCrawlEvents(): Promise<RawEvent[]> {
     .filter((p): p is CrawlPage => p !== null && p.text.length > 80)
   if (pages.length === 0) return []
   return extractEventsFromPages(pages)
+}
+
+// Crawl ONE configured source (the config-driven `crawl` parser). Fetches
+// source.url, and — the Phase 2B cost lever — computes a content hash of the
+// readable text and skips the expensive Gemini extraction when the page is
+// unchanged since the last successful crawl. Returns { events, skipped } so the
+// orchestrator can record a budget-free 'skipped' run instead of a zero-event
+// 'ok' one (PRODUCT-SPEC §6.1).
+export async function fetchCrawlSource(
+  source: SourceRow,
+  _ctx: SourceContext
+): Promise<{ events: RawEvent[]; skipped: boolean }> {
+  if (!source.url) return { events: [], skipped: false }
+
+  const page = await fetchPage(source.url)
+  if (!page || page.text.length <= 80) return { events: [], skipped: false }
+
+  const hash = hashPageText(page.text)
+  const previous = await getSourceContentHash(source.id)
+  if (previous && previous === hash) {
+    // Unchanged since last crawl — no new events possible, so don't spend Gemini.
+    return { events: [], skipped: true }
+  }
+
+  // Emit under the configured source name so provenance links to this row.
+  const named: CrawlPage = { ...page, source: source.name }
+  const events = await extractEventsFromPages([named])
+  // Persist the new hash only after a successful extraction, so a transient
+  // Gemini failure doesn't wrongly mark the page "seen" and skip it next run.
+  await setSourceContentHash(source.id, hash)
+  return { events, skipped: false }
 }
