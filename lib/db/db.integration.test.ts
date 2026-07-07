@@ -222,6 +222,28 @@ describe('cross-source dedup via persistEvents', () => {
   })
 })
 
+describe('sources table (migration 008)', () => {
+  it('seeds Austin sources with valid kinds and parsers', async () => {
+    const db = await getPgliteDb()
+    const rows = await db.query<{ name: string; kind: string; parser: string; city_id: number; enabled: boolean }>(
+      `SELECT name, kind, parser, city_id, enabled FROM sources ORDER BY name`
+    )
+    // At least the structured + feed sources are seeded.
+    expect(rows.length).toBeGreaterThanOrEqual(15)
+    // Every seeded source belongs to Austin and has a non-empty parser.
+    for (const r of rows) {
+      expect(r.city_id).toBe(1)
+      expect(r.parser.length).toBeGreaterThan(0)
+      expect(['api', 'ical', 'rss', 'jsonld', 'crawl']).toContain(r.kind)
+    }
+    // The known structured sources exist by name.
+    const names = new Set(rows.map(r => r.name))
+    expect(names.has('eventbrite')).toBe(true)
+    expect(names.has('ticketmaster')).toBe(true)
+    expect(names.has('newspaper:kut')).toBe(true)
+  })
+})
+
 function mk(overrides: Partial<RawEvent>): RawEvent {
   return {
     title: 'Integration Test Show',
