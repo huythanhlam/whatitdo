@@ -76,6 +76,18 @@ async function fetchBlueskyItems(): Promise<FeedItem[]> {
   return items
 }
 
+// Bluesky search → events (the config-driven `bluesky` parser). Reddit feeds are
+// now plain `rss` source rows dispatched by the generic rss parser, so they no
+// longer run through here.
+export async function fetchBlueskyEvents(): Promise<RawEvent[]> {
+  const items = await fetchBlueskyItems()
+  if (items.length === 0) return []
+  return extractEvents(items)
+}
+
+// Back-compat aggregate (reddit + bluesky together). Retained for the dev path;
+// the orchestrator now drives reddit via `sources` rows and bluesky via the
+// `bluesky` parser.
 export async function fetchSocialEvents(): Promise<RawEvent[]> {
   const [redditItems, blueskyItems] = await Promise.all([
     fetchFeeds(REDDIT_FEEDS, { limit: 25 }),

@@ -75,23 +75,29 @@ function parseIcalText(icalText: string): RawEvent[] {
   return results
 }
 
-export async function fetchIcalEvents(): Promise<RawEvent[]> {
-  const results: RawEvent[] = []
-
-  for (const feed of ICAL_FEEDS) {
-    try {
-      const res = await fetch(feed.url, {
-        headers: { 'User-Agent': 'WhatItDo Events Bot/1.0' },
-        signal: AbortSignal.timeout(15000),
-      })
-      if (!res.ok) continue
-      const text = await res.text()
-      const parsed = parseIcalText(text)
-      results.push(...parsed.map(e => ({ ...e, source: feed.source_prefix })))
-    } catch (e) {
-      console.error(`Failed to fetch iCal feed ${feed.url}:`, e)
-    }
+// Fetch and parse ONE iCal feed, tagging every event with the given source name.
+// Never throws — returns [] on any network/parse failure so one dead feed can't
+// sink the run. This is the per-URL mechanism the config-driven `ical` parser
+// dispatches to; each iCal feed is now a `sources` row rather than a code entry.
+export async function fetchIcalUrl(url: string, source: string): Promise<RawEvent[]> {
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'WhatItDo Events Bot/1.0' },
+      signal: AbortSignal.timeout(15000),
+    })
+    if (!res.ok) return []
+    const text = await res.text()
+    return parseIcalText(text).map(e => ({ ...e, source }))
+  } catch (e) {
+    console.error(`Failed to fetch iCal feed ${url}:`, e)
+    return []
   }
+}
 
-  return results
+// Back-compat aggregate over the built-in list. Retained for the dev path and
+// any direct callers; the orchestrator now drives iCal via `sources` rows.
+export async function fetchIcalEvents(): Promise<RawEvent[]> {
+  const out: RawEvent[] = []
+  for (const feed of ICAL_FEEDS) out.push(...(await fetchIcalUrl(feed.url, feed.source_prefix)))
+  return out
 }
