@@ -38,7 +38,8 @@ export function isValidEvent(raw: RawEvent): boolean {
 // canonical row — preserving the return shape the ingest orchestrator records as
 // events_upserted.
 export async function persistEvents(
-  input: RawEvent[]
+  input: RawEvent[],
+  opts: { status?: 'pending' | 'approved' } = {}
 ): Promise<{ inserted: number; skipped: number; rejected: number; total: number }> {
   const total = input.length
   if (total === 0) return { inserted: 0, skipped: 0, rejected: 0, total: 0 }
@@ -62,7 +63,7 @@ export async function persistEvents(
   // Ingest already runs sources concurrently; within a source, order matters.
   for (let i = 0; i < events.length; i++) {
     try {
-      const eventId = await persistOne(events[i], CITY_ID)
+      const eventId = await persistOne(events[i], CITY_ID, opts.status ?? 'approved')
       const categoryIds = slugs[i].map(s => categoryIdBySlug[s]).filter(Boolean)
       await setEventCategories(eventId, categoryIds)
       inserted++
@@ -76,7 +77,7 @@ export async function persistEvents(
 
 // Resolve one raw event to a canonical event id, creating, matching, or merging
 // as needed, and always recording provenance. Returns the canonical event id.
-async function persistOne(raw: RawEvent, cityId: number): Promise<string> {
+async function persistOne(raw: RawEvent, cityId: number, status: 'pending' | 'approved'): Promise<string> {
   const titleNorm = normalizeTitle(raw.title, raw.venue_name)
   const venueNorm = normalizeVenue(raw.venue_name)
 
@@ -104,8 +105,8 @@ async function persistOne(raw: RawEvent, cityId: number): Promise<string> {
         if (patch) await updateEventFields(eventId, patch)
       }
     } else {
-      // 3b. No match — new canonical event.
-      eventId = await insertEvent(raw, { cityId, titleNorm, venueNorm })
+      // 3b. No match — new canonical event (carries the caller's moderation status).
+      eventId = await insertEvent(raw, { cityId, titleNorm, venueNorm, status })
     }
   }
 
