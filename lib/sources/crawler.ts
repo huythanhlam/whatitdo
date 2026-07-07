@@ -1,6 +1,8 @@
 import * as cheerio from 'cheerio'
 import { extractEventsFromPages, type CrawlPage } from '@/lib/extractor'
-import type { RawEvent } from './types'
+import type { RawEvent, SourceRow } from './types'
+import { hashPageText } from './content-hash'
+import { getSourceContentHash, setSourceContentHash } from '@/lib/db'
 
 // Generic page crawler for influencer posts and social-media aggregator pages
 // that share events (link-in-bio pages, "things to do in Austin" roundups, etc.).
@@ -8,24 +10,6 @@ import type { RawEvent } from './types'
 // the whole page to the multi-event extractor, which pulls out every concrete
 // upcoming event. Pages behind a login (Instagram/TikTok feeds) can't be fetched
 // server-side — for those, paste the post URL or caption into POST /api/import.
-
-// Curated, publicly-crawlable Austin aggregator pages. Operators add their own
-// (influencer link-in-bio pages, specific roundup posts) via CRAWL_URLS.
-const DEFAULT_CRAWL_URLS = [
-  'https://do512.com/',
-  'https://365thingsaustin.com/',
-  'https://www.austinchronicle.com/events/',
-]
-
-function configuredUrls(): string[] {
-  const fromEnv = (process.env.CRAWL_URLS ?? '')
-    .split(',')
-    .map(s => s.trim())
-    .filter(u => /^https?:\/\//i.test(u))
-  // Env-provided URLs are the point of this source; defaults are a fallback so it
-  // does something useful out of the box.
-  return fromEnv.length > 0 ? fromEnv : DEFAULT_CRAWL_URLS
-}
 
 function hostSlug(url: string): string {
   try {
@@ -178,12 +162,32 @@ export function pageFromHtml(html: string, url: string): CrawlPage {
   }
 }
 
-export async function fetchCrawlEvents(): Promise<RawEvent[]> {
-  const urls = configuredUrls()
-  const settled = await Promise.allSettled(urls.map(fetchPage))
-  const pages = settled
-    .map(s => (s.status === 'fulfilled' ? s.value : null))
-    .filter((p): p is CrawlPage => p !== null && p.text.length > 80)
-  if (pages.length === 0) return []
-  return extractEventsFromPages(pages)
+// Crawl ONE configured source (the config-driven `crawl` parser). Fetches
+// source.url, and — the Phase 2B cost lever — computes a content hash of the
+// readable text and skips the expensive Gemini extraction when the page is
+// unchanged since the last successful crawl. Returns { events, skipped } so the
+// orchestrator can record a budget-free 'skipped' run instead of a zero-event
+// 'ok' one (PRODUCT-SPEC §6.1).
+export async function fetchCrawlSource(
+  source: SourceRow
+): Promise<{ events: RawEvent[]; skipped: boolean }> {
+  if (!source.url) return { events: [], skipped: false }
+
+  const page = await fetchPage(source.url)
+  if (!page || page.text.length <= 80) return { events: [], skipped: false }
+
+  const hash = hashPageText(page.text)
+  const previous = await getSourceContentHash(source.id)
+  if (previous && previous === hash) {
+    // Unchanged since last crawl — no new events possible, so don't spend Gemini.
+    return { events: [], skipped: true }
+  }
+
+  // Emit under the configured source name so provenance links to this row.
+  const named: CrawlPage = { ...page, source: source.name }
+  const events = await extractEventsFromPages([named])
+  // Persist the new hash only after a successful extraction, so a transient
+  // Gemini failure doesn't wrongly mark the page "seen" and skip it next run.
+  await setSourceContentHash(source.id, hash)
+  return { events, skipped: false }
 }

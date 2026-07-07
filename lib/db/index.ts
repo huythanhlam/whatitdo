@@ -1,7 +1,7 @@
 import type { Db } from './driver'
 import { getPgDb } from './pg'
 import { getPgliteDb } from './pglite'
-import type { RawEvent } from '@/lib/sources/types'
+import type { RawEvent, SourceRow } from '@/lib/sources/types'
 import type { ExistingEvent, Candidate, FieldPatch } from '@/lib/dedup'
 
 // Returns true when no direct Postgres connection is configured — the app then
@@ -267,12 +267,14 @@ export async function recordProvenance(p: {
   raw: unknown
 }): Promise<void> {
   const db = await getDb()
+  // source_id resolves from sources.name (Phase 2B) — a subquery so ingest and
+  // import share one path; NULL when no matching row (e.g. 'seed'/'import').
   await db.query(
-    `INSERT INTO event_sources (event_id, source, external_id, url, raw, ingested_at)
-     VALUES ($1, $2, $3, $4, $5, NOW())
+    `INSERT INTO event_sources (event_id, source, source_id, external_id, url, raw, ingested_at)
+     VALUES ($1, $2, (SELECT id FROM sources WHERE name = $2), $3, $4, $5, NOW())
      ON CONFLICT (source, external_id) DO UPDATE SET
-       event_id = EXCLUDED.event_id, url = EXCLUDED.url,
-       raw = EXCLUDED.raw, ingested_at = NOW()`,
+       event_id = EXCLUDED.event_id, source_id = EXCLUDED.source_id,
+       url = EXCLUDED.url, raw = EXCLUDED.raw, ingested_at = NOW()`,
     [p.eventId, p.source, p.externalId, p.url, JSON.stringify(p.raw)]
   )
 }
@@ -355,11 +357,51 @@ export async function addFeatured(f: {
 }
 
 // ---------------------------------------------------------------------------
+// Sources — config-driven ingestion instances (Phase 2B)
+// ---------------------------------------------------------------------------
+
+// Enabled source rows for a city, oldest-successful first so stale/never-run
+// sources are prioritized by the orchestrator.
+export async function getEnabledSources(cityId: number): Promise<SourceRow[]> {
+  const db = await getDb()
+  return db.query<SourceRow>(
+    `SELECT id, city_id, name, kind, url, parser, cadence, enabled,
+            last_success, content_hash, notes
+     FROM sources
+     WHERE city_id = $1 AND enabled = true
+     ORDER BY last_success ASC NULLS FIRST, id ASC`,
+    [cityId]
+  )
+}
+
+export async function getSourceContentHash(id: number): Promise<string | null> {
+  const db = await getDb()
+  const rows = await db.query<{ content_hash: string | null }>(
+    `SELECT content_hash FROM sources WHERE id = $1`,
+    [id]
+  )
+  return rows[0]?.content_hash ?? null
+}
+
+export async function setSourceContentHash(id: number, hash: string): Promise<void> {
+  const db = await getDb()
+  await db.query(`UPDATE sources SET content_hash = $2 WHERE id = $1`, [id, hash])
+}
+
+// Record a successful fetch (any events or a valid unchanged skip). Powers the
+// oldest-first ordering above and, later, source-staleness alerting.
+export async function touchSourceSuccess(id: number): Promise<void> {
+  const db = await getDb()
+  await db.query(`UPDATE sources SET last_success = NOW() WHERE id = $1`, [id])
+}
+
+// ---------------------------------------------------------------------------
 // Source runs — the observability ledger (one row per source per ingest run)
 // ---------------------------------------------------------------------------
 export type SourceRun = {
   id: number
   source: string
+  source_id: number | null
   started_at: string
   finished_at: string | null
   status: 'running' | 'ok' | 'error' | 'skipped'
@@ -370,13 +412,14 @@ export type SourceRun = {
   error: string | null
 }
 
-// Open a run (status 'running'); returns its id so the orchestrator can close
-// it with the final counts once the source finishes.
-export async function startSourceRun(source: string): Promise<number> {
+// Open a run (status 'running'); returns its id so the orchestrator can close it
+// with the final counts. `sourceId` links the run to its `sources` row (Phase
+// 2B); null for legacy/ad-hoc callers.
+export async function startSourceRun(source: string, sourceId?: number | null): Promise<number> {
   const db = await getDb()
   const rows = await db.query<{ id: number }>(
-    `INSERT INTO source_runs (source, status) VALUES ($1, 'running') RETURNING id`,
-    [source]
+    `INSERT INTO source_runs (source, source_id, status) VALUES ($1, $2, 'running') RETURNING id`,
+    [source, sourceId ?? null]
   )
   return rows[0].id
 }

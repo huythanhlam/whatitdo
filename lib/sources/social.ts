@@ -1,4 +1,4 @@
-import { fetchFeeds, type FeedItem } from './rss'
+import { type FeedItem } from './rss'
 import { extractEvents } from '@/lib/extractor'
 import type { RawEvent } from './types'
 
@@ -8,12 +8,6 @@ import type { RawEvent } from './types'
 // Reddit exposes per-subreddit Atom feeds at /<sub>/.rss (the JSON API blocks
 // datacenter IPs, but .rss is served through a CDN that does not). Bluesky's
 // public AppView (public.api.bsky.app) needs no auth.
-
-// Subreddits whose posts are predominantly Austin happenings.
-const REDDIT_FEEDS: { url: string; source: string }[] = [
-  { url: 'https://www.reddit.com/r/AustinEvents/.rss', source: 'social:reddit-austinevents' },
-  { url: 'https://www.reddit.com/r/Austin/.rss', source: 'social:reddit-austin' },
-]
 
 // Bluesky full-text searches aimed at event announcements.
 const BLUESKY_QUERIES = [
@@ -76,12 +70,11 @@ async function fetchBlueskyItems(): Promise<FeedItem[]> {
   return items
 }
 
-export async function fetchSocialEvents(): Promise<RawEvent[]> {
-  const [redditItems, blueskyItems] = await Promise.all([
-    fetchFeeds(REDDIT_FEEDS, { limit: 25 }),
-    fetchBlueskyItems(),
-  ])
-  const items = [...redditItems, ...blueskyItems]
+// Bluesky search → events (the config-driven `bluesky` parser). Reddit feeds are
+// now plain `rss` source rows dispatched by the generic rss parser, so they no
+// longer run through here.
+export async function fetchBlueskyEvents(): Promise<RawEvent[]> {
+  const items = await fetchBlueskyItems()
   if (items.length === 0) return []
   return extractEvents(items)
 }

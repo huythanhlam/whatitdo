@@ -18,6 +18,10 @@ import {
   findDedupCandidates,
   recordProvenance,
   getEventSources,
+  getEnabledSources,
+  getSourceContentHash,
+  setSourceContentHash,
+  touchSourceSuccess,
 } from './index'
 import { persistEvents } from '@/lib/persist'
 import type { RawEvent } from '@/lib/sources/types'
@@ -219,6 +223,93 @@ describe('cross-source dedup via persistEvents', () => {
     const db = await getPgliteDb()
     const rows = await db.query(`SELECT event_id FROM event_sources WHERE source = 'crawl' AND external_id = 'idem-1'`)
     expect(rows).toHaveLength(1)
+  })
+})
+
+describe('sources table (migration 008)', () => {
+  it('seeds Austin sources with valid kinds and parsers', async () => {
+    const db = await getPgliteDb()
+    const rows = await db.query<{ name: string; kind: string; parser: string; city_id: number; enabled: boolean }>(
+      `SELECT name, kind, parser, city_id, enabled FROM sources ORDER BY name`
+    )
+    // At least the structured + feed sources are seeded.
+    expect(rows.length).toBeGreaterThanOrEqual(15)
+    // Every seeded source belongs to Austin and has a non-empty parser.
+    for (const r of rows) {
+      expect(r.city_id).toBe(1)
+      expect(r.parser.length).toBeGreaterThan(0)
+      expect(['api', 'ical', 'rss', 'jsonld', 'crawl']).toContain(r.kind)
+    }
+    // The known structured sources exist by name.
+    const names = new Set(rows.map(r => r.name))
+    expect(names.has('eventbrite')).toBe(true)
+    expect(names.has('ticketmaster')).toBe(true)
+    expect(names.has('newspaper:kut')).toBe(true)
+  })
+})
+
+describe('source_runs source_id (Phase 2B)', () => {
+  it('stamps source_id on the run row', async () => {
+    const db = await getPgliteDb()
+    const src = (await db.query<{ id: number }>(`SELECT id FROM sources WHERE name = 'eventbrite'`))[0]
+    const runId = await startSourceRun('eventbrite', src.id)
+    await finishSourceRun(runId, { status: 'ok', events_found: 1, events_upserted: 1 })
+    const row = (await db.query<{ source_id: number }>(
+      `SELECT source_id FROM source_runs WHERE id = $1`, [runId]
+    ))[0]
+    expect(row.source_id).toBe(src.id)
+  })
+})
+
+describe('event_sources.source_id backfill + stamping (migration 009)', () => {
+  it('stamps source_id from sources.name on new provenance rows', async () => {
+    const db = await getPgliteDb()
+    const ev = (await db.query<{ id: string }>(`SELECT id FROM events LIMIT 1`))[0]
+    await recordProvenance({ eventId: ev.id, source: 'eventbrite', externalId: 'eb-test-1', url: null, raw: {} })
+    const row = (await db.query<{ source_id: number | null }>(
+      `SELECT es.source_id FROM event_sources es WHERE es.external_id = 'eb-test-1'`
+    ))[0]
+    const eb = (await db.query<{ id: number }>(`SELECT id FROM sources WHERE name = 'eventbrite'`))[0]
+    expect(row.source_id).toBe(eb.id)
+  })
+})
+
+describe('source queries (Phase 2B)', () => {
+  it('getEnabledSources returns Austin enabled rows only', async () => {
+    const rows = await getEnabledSources(1)
+    expect(rows.length).toBeGreaterThanOrEqual(15)
+    expect(rows.every(r => r.enabled && r.city_id === 1)).toBe(true)
+    const eb = rows.find(r => r.name === 'eventbrite')
+    expect(eb?.parser).toBe('eventbrite')
+  })
+
+  it('content hash round-trips and touchSourceSuccess sets last_success', async () => {
+    const rows = await getEnabledSources(1)
+    const crawl = rows.find(r => r.parser === 'crawl')!
+    expect(await getSourceContentHash(crawl.id)).toBeNull()
+    await setSourceContentHash(crawl.id, 'deadbeef')
+    expect(await getSourceContentHash(crawl.id)).toBe('deadbeef')
+    await touchSourceSuccess(crawl.id)
+    const after = await getEnabledSources(1)
+    expect(after.find(r => r.id === crawl.id)!.last_success).not.toBeNull()
+  })
+})
+
+describe('Austin venue sources (migration 010)', () => {
+  it('seeds a substantial set of enabled crawl/ical venue sources', async () => {
+    const db = await getPgliteDb()
+    const rows = await db.query<{ n: string }>(
+      `SELECT COUNT(*)::text AS n FROM sources WHERE notes = 'venue' AND enabled = true`
+    )
+    expect(parseInt(rows[0].n, 10)).toBeGreaterThanOrEqual(40)
+  })
+
+  it('keeps every source name unique', async () => {
+    const db = await getPgliteDb()
+    const dupes = await db.query<{ name: string }>(
+      `SELECT name FROM sources GROUP BY name HAVING COUNT(*) > 1`
+    )
+    expect(dupes).toEqual([])
   })
 })
 

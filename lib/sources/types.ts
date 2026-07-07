@@ -29,13 +29,31 @@ export type SourceContext = {
 // structured API/ical sources don't.
 export type SourceKind = 'api' | 'ical' | 'rss' | 'jsonld' | 'crawl' | 'seed'
 
-// The single contract every source implements. `enabled()` replaces today's
-// silent []-return when an API key is missing: a disabled source is recorded as
-// `skipped` in source_runs rather than looking like an empty (dead) source.
-export interface SourceAdapter {
+// A configured source instance (one row of the `sources` table). The code holds
+// parser MECHANISMS; the database holds these INSTANCES. `name` is the exact
+// RawEvent.source string the row's parser emits, so provenance links back by name.
+export type SourceRow = {
+  id: number
+  city_id: number
   name: string
   kind: SourceKind
-  enabled(): boolean
-  fetch(ctx: SourceContext): Promise<RawEvent[]>
+  url: string | null
+  parser: string
+  cadence: 'daily' | 'weekly'
+  enabled: boolean
+  last_success: string | null
+  content_hash: string | null
+  notes: string | null
+}
+
+// A parser MECHANISM. Instances live in the DB (`SourceRow`); the code registry
+// maps `SourceRow.parser` → one of these. `available()` replaces the old
+// per-source enabled() API-key check: enabled(DB) AND available(code) must both
+// hold or the run is recorded as `skipped`. `crawl` returns a skip flag so the
+// orchestrator can distinguish "unchanged, didn't spend Gemini" from "found
+// nothing".
+export interface SourceParser {
+  available(): boolean
+  fetch(source: SourceRow, ctx: SourceContext): Promise<{ events: RawEvent[]; skipped: boolean }>
 }
 
