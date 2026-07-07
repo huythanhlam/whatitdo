@@ -35,3 +35,34 @@ jobs:
 
       - name: Build
         run: npx next build
+
+  # Apply pending Supabase migrations after a merge to main, so the shared
+  # Postgres schema is never behind the deployed code (PGlite migrates itself at
+  # init; Postgres does not). Runs only on main — never on PRs — and only after
+  # the build passes. Requires a DATABASE_URL repo secret (the Supabase pooler
+  # connection); until it's set, the step no-ops instead of failing the run.
+  migrate:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Apply migrations to Supabase
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -n "$DATABASE_URL" ]; then
+            npm run migrate
+          else
+            echo "DATABASE_URL secret not set — skipping migrate."
+            echo "Add it under repo Settings → Secrets and variables → Actions to enable auto-migration."
+          fi
