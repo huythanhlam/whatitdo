@@ -40,7 +40,7 @@ export const PARSERS: Record<string, SourceParser> = {
   bluesky: simple(hasGeminiKey, () => fetchBlueskyEvents()),
 
   // Crawl: content-hash aware, returns its own skip flag.
-  crawl: { available: hasGeminiKey, fetch: (source, ctx) => fetchCrawlSource(source, ctx) },
+  crawl: { available: hasGeminiKey, fetch: (source) => fetchCrawlSource(source) },
 
   // YouTube needs both its API key and Gemini.
   youtube: simple(() => has(process.env.YOUTUBE_API_KEY) && hasGeminiKey(), () => fetchYoutubeEvents()),

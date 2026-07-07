@@ -29,16 +29,6 @@ export type SourceContext = {
 // structured API/ical sources don't.
 export type SourceKind = 'api' | 'ical' | 'rss' | 'jsonld' | 'crawl' | 'seed'
 
-// The single contract every source implements. `enabled()` replaces today's
-// silent []-return when an API key is missing: a disabled source is recorded as
-// `skipped` in source_runs rather than looking like an empty (dead) source.
-export interface SourceAdapter {
-  name: string
-  kind: SourceKind
-  enabled(): boolean
-  fetch(ctx: SourceContext): Promise<RawEvent[]>
-}
-
 // A configured source instance (one row of the `sources` table). The code holds
 // parser MECHANISMS; the database holds these INSTANCES. `name` is the exact
 // RawEvent.source string the row's parser emits, so provenance links back by name.

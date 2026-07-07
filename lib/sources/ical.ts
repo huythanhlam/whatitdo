@@ -1,9 +1,5 @@
 import type { RawEvent } from './types'
 
-const ICAL_FEEDS = [
-  { url: 'https://www.austintexas.gov/calendar/ical', source_prefix: 'austin-gov' },
-]
-
 function parseIcalDate(val: string): Date | null {
   // Handle TZID=...:20260628T120000 or 20260628T120000Z or 20260628
   const cleaned = val.includes(':') ? val.split(':').pop()! : val
@@ -92,12 +88,4 @@ export async function fetchIcalUrl(url: string, source: string): Promise<RawEven
     console.error(`Failed to fetch iCal feed ${url}:`, e)
     return []
   }
-}
-
-// Back-compat aggregate over the built-in list. Retained for the dev path and
-// any direct callers; the orchestrator now drives iCal via `sources` rows.
-export async function fetchIcalEvents(): Promise<RawEvent[]> {
-  const out: RawEvent[] = []
-  for (const feed of ICAL_FEEDS) out.push(...(await fetchIcalUrl(feed.url, feed.source_prefix)))
-  return out
 }
