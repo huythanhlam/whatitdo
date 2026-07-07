@@ -30,12 +30,20 @@ export type Event = {
   featured_label?: string | null
 }
 
+// One source that contributed to a canonical event (cross-source provenance).
+export type EventSource = {
+  source: string
+  url: string | null
+}
+
 // An event with its joined categories and resolved featured state — what every
-// read path in lib/db returns and every card/list/calendar consumes.
+// read path in lib/db returns and every card/list/calendar consumes. `sources`
+// is populated only by getEvent (the detail read), for the "also listed on" UI.
 export type EnrichedEvent = Event & {
   categories?: Category[]
   is_featured?: boolean
   featured_label?: string | null
+  sources?: EventSource[]
 }
 
 export type Subscription = {

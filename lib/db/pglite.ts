@@ -1,7 +1,9 @@
 import { PGlite } from '@electric-sql/pglite'
+import { pg_trgm } from '@electric-sql/pglite/contrib/pg_trgm'
 import { fetchSeedEvents } from '@/lib/sources/seed'
 import { tagByKeyword } from '@/lib/tagger'
 import { imageForCategories } from '@/lib/images'
+import { normalizeTitle, normalizeVenue } from '@/lib/normalize'
 import type { Db } from './driver'
 import { migrate } from './migrate'
 
@@ -51,7 +53,7 @@ function wrap(pg: PGlite): Db {
 }
 
 async function init(): Promise<Db> {
-  const pg = new PGlite()
+  const pg = new PGlite({ extensions: { pg_trgm } })
   await pg.exec(PREAMBLE)
   const db = wrap(pg)
   await migrate(db)
@@ -61,8 +63,8 @@ async function init(): Promise<Db> {
 
 // Insert baseline events so a fresh in-memory instance is never empty. Uses the
 // deterministic seed source with keyword-based category tagging (no API calls)
-// and category-themed fallback images. Idempotent via ON CONFLICT so a re-run of
-// init() or a later ingest won't duplicate rows.
+// and category-themed fallback images. Idempotent via an event_sources lookup so
+// a re-run of init() or a later ingest won't duplicate rows.
 async function seedBaselineEvents(db: Db): Promise<void> {
   const slugToId = new Map<string, number>()
   const cats = await db.query<{ id: number; slug: string }>(`SELECT id, slug FROM categories`)
@@ -71,21 +73,36 @@ async function seedBaselineEvents(db: Db): Promise<void> {
   const events = await fetchSeedEvents()
 
   for (const raw of events) {
+    // Idempotent: skip if this (source, external_id) is already recorded.
+    const seen = await db.query<{ event_id: string }>(
+      `SELECT event_id FROM event_sources WHERE source = $1 AND external_id = $2`,
+      [raw.source, raw.source_id]
+    )
+    if (seen.length > 0) continue
+
     const slugs = tagByKeyword(raw.title, raw.description)
     const imageUrl = raw.image_url ?? imageForCategories(slugs)
+    const venueNorm = normalizeVenue(raw.venue_name)
+    const titleNorm = normalizeTitle(raw.title, raw.venue_name)
 
     const res = await db.query<{ id: string }>(
       `INSERT INTO events (title, description, start_time, end_time, venue_name,
-        venue_address, image_url, ticket_url, source, source_id, is_free, price_min, price_max, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, NOW())
-       ON CONFLICT (source, source_id) DO NOTHING
+        venue_address, image_url, ticket_url, source, source_id, is_free,
+        price_min, price_max, city_id, title_norm, venue_norm, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, 1, $14, $15, NOW())
        RETURNING id`,
       [raw.title, raw.description, raw.start_time, raw.end_time, raw.venue_name,
        raw.venue_address, imageUrl, raw.ticket_url, raw.source, raw.source_id,
-       raw.is_free, raw.price_min, raw.price_max]
+       raw.is_free, raw.price_min, raw.price_max, titleNorm, venueNorm]
     )
     const eventId = res[0]?.id
     if (!eventId) continue
+
+    await db.query(
+      `INSERT INTO event_sources (event_id, source, external_id, url)
+       VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
+      [eventId, raw.source, raw.source_id, raw.ticket_url]
+    )
 
     for (const slug of slugs) {
       const cid = slugToId.get(slug)

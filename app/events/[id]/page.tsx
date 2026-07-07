@@ -54,6 +54,10 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
   const provider = getTicketProvider(event.ticket_url)
   const ticketCta = provider ? (event.is_free ? 'RSVP / Details' : provider.cta) : null
   const jsonLd = eventJsonLd(event)
+  // Cross-source provenance: the distinct other sources that also listed this
+  // canonical event (dedup merges them into one record). Empty for single-source events.
+  const otherSources = Array.from(new Set((event.sources ?? []).map(s => s.source)))
+    .filter(s => s !== event.source)
 
   return (
     <div className="min-h-screen bg-background">
@@ -99,6 +103,9 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
           )}
           <p>{event.is_free ? '🆓 Free entry' : `💰 ${priceLabel}`}</p>
           <p className="text-xs text-slate-400">Source: {event.source}</p>
+          {otherSources.length > 0 && (
+            <p className="text-xs text-slate-400">Also listed on {otherSources.join(', ')}</p>
+          )}
         </div>
 
         {event.description && (

@@ -2,6 +2,7 @@ import type { Db } from './driver'
 import { getPgDb } from './pg'
 import { getPgliteDb } from './pglite'
 import type { RawEvent } from '@/lib/sources/types'
+import type { ExistingEvent, Candidate, FieldPatch } from '@/lib/dedup'
 
 // Returns true when no direct Postgres connection is configured — the app then
 // runs against an embedded local Postgres (PGlite) so it works with zero
@@ -50,6 +51,13 @@ const FEATURED_JSON = `COALESCE((
   SELECT json_agg(json_build_object('starts_at', f.starts_at, 'ends_at', f.ends_at, 'ad_label', f.ad_label))
   FROM featured_listings f WHERE f.event_id = e.id
 ), '[]'::json) AS featured_listings`
+
+// Per-event provenance for the "also listed on …" UI: the distinct sources that
+// contributed to this canonical event, with their source-specific links.
+const SOURCES_JSON = `COALESCE((
+  SELECT json_agg(json_build_object('source', s.source, 'url', s.url) ORDER BY s.source)
+  FROM event_sources s WHERE s.event_id = e.id
+), '[]'::json) AS sources`
 
 // Full-text search over title + description + venue, matching the expression of
 // the GIN index in migration 001 so it uses that index instead of a sequential
@@ -142,7 +150,7 @@ export async function getEvent(id: string): Promise<EnrichedEvent | null> {
   const db = await getDb()
   const nowIso = new Date().toISOString()
   const rows = await db.query<Record<string, unknown>>(
-    `SELECT e.*, ${CATEGORIES_JSON} FROM events e WHERE e.id = $1`,
+    `SELECT e.*, ${CATEGORIES_JSON}, ${SOURCES_JSON} FROM events e WHERE e.id = $1`,
     [id]
   )
   if (rows.length === 0) return null
@@ -158,21 +166,126 @@ export async function getCategoryIdBySlug(): Promise<Record<string, number>> {
   return Object.fromEntries(rows.map(c => [c.slug, c.id]))
 }
 
-export async function upsertEvent(raw: RawEvent): Promise<string | null> {
+// Idempotency lookup: has this exact (source, external_id) already been mapped to
+// a canonical event? Mirrors the old UNIQUE(source, source_id) fast-path so a
+// daily re-ingest updates in place instead of re-running dedup.
+export async function findEventBySource(source: string, externalId: string): Promise<string | null> {
+  const db = await getDb()
+  const rows = await db.query<{ event_id: string }>(
+    `SELECT event_id FROM event_sources WHERE source = $1 AND external_id = $2`,
+    [source, externalId]
+  )
+  return rows[0]?.event_id ?? null
+}
+
+// Blocking + scoring in one query (PRODUCT-SPEC §2.2.1–2.2.2): candidates share a
+// city, start within ±2h, and either agree on venue or have a null venue; scored
+// by pg_trgm title similarity. venueAgree = both venues present and equal.
+export async function findDedupCandidates(opts: {
+  cityId: number
+  startTime: string
+  titleNorm: string
+  venueNorm: string | null
+}): Promise<Candidate[]> {
+  const db = await getDb()
+  const rows = await db.query<{ id: string; sim: number; venue_agree: boolean }>(
+    `SELECT e.id,
+            similarity(e.title_norm, $1) AS sim,
+            (e.venue_norm IS NOT NULL AND $2::text IS NOT NULL AND e.venue_norm = $2) AS venue_agree
+     FROM events e
+     WHERE e.city_id = $3
+       AND e.start_time BETWEEN ($4)::timestamptz - interval '2 hours'
+                            AND ($4)::timestamptz + interval '2 hours'
+       AND (e.venue_norm = $2 OR e.venue_norm IS NULL OR $2::text IS NULL)
+       AND e.title_norm IS NOT NULL
+     ORDER BY sim DESC
+     LIMIT 10`,
+    [opts.titleNorm, opts.venueNorm, opts.cityId, opts.startTime]
+  )
+  return rows.map(r => ({ id: r.id, sim: Number(r.sim), venueAgree: !!r.venue_agree }))
+}
+
+// Insert a brand-new canonical event. Caller supplies the normalized keys.
+export async function insertEvent(
+  raw: RawEvent,
+  keys: { cityId: number; titleNorm: string; venueNorm: string | null }
+): Promise<string> {
   const db = await getDb()
   const rows = await db.query<{ id: string }>(
     `INSERT INTO events (title, description, start_time, end_time, venue_name,
-       venue_address, image_url, ticket_url, source, source_id, is_free, price_min, price_max, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, NOW())
-     ON CONFLICT (source, source_id) DO UPDATE SET
-       title = EXCLUDED.title, description = EXCLUDED.description,
-       start_time = EXCLUDED.start_time, updated_at = NOW()
+       venue_address, image_url, ticket_url, source, source_id, is_free,
+       price_min, price_max, city_id, title_norm, venue_norm, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16, NOW())
      RETURNING id`,
     [raw.title, raw.description, raw.start_time, raw.end_time, raw.venue_name,
      raw.venue_address, raw.image_url, raw.ticket_url, raw.source, raw.source_id,
-     raw.is_free, raw.price_min, raw.price_max]
+     raw.is_free, raw.price_min, raw.price_max, keys.cityId, keys.titleNorm, keys.venueNorm]
   )
-  return rows[0]?.id ?? null
+  return rows[0].id
+}
+
+// Fetch the mergeable columns of a canonical event for mergeFields().
+export async function getEventRow(id: string): Promise<ExistingEvent | null> {
+  const db = await getDb()
+  const rows = await db.query<ExistingEvent>(
+    `SELECT source, source_id, title, venue_norm, description, image_url,
+            venue_name, venue_address, end_time, ticket_url, is_free, price_min, price_max
+     FROM events WHERE id = $1`,
+    [id]
+  )
+  return rows[0] ?? null
+}
+
+// Apply a whitelisted field patch. Column names come only from FieldPatch keys,
+// so the dynamic SQL is injection-safe (values are parameterized). PATCHABLE must
+// stay a superset of FieldPatch's keys — venue_norm included, so a filled venue's
+// normalized key is not silently dropped.
+const PATCHABLE = new Set([
+  'title', 'title_norm', 'source', 'source_id', 'description', 'image_url',
+  'venue_name', 'venue_norm', 'venue_address', 'end_time', 'ticket_url',
+  'is_free', 'price_min', 'price_max',
+])
+export async function updateEventFields(id: string, patch: FieldPatch): Promise<void> {
+  const entries = Object.entries(patch).filter(([k]) => PATCHABLE.has(k))
+  if (entries.length === 0) return
+  const db = await getDb()
+  const sets = entries.map(([k], i) => `${k} = $${i + 2}`)
+  const values = entries.map(([, v]) => v)
+  await db.query(
+    `UPDATE events SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $1`,
+    [id, ...values]
+  )
+}
+
+// Write/refresh the provenance row. ON CONFLICT keeps the pipeline idempotent
+// across daily re-ingests of the same (source, external_id).
+export async function recordProvenance(p: {
+  eventId: string
+  source: string
+  externalId: string
+  url: string | null
+  raw: unknown
+}): Promise<void> {
+  const db = await getDb()
+  await db.query(
+    `INSERT INTO event_sources (event_id, source, external_id, url, raw, ingested_at)
+     VALUES ($1, $2, $3, $4, $5, NOW())
+     ON CONFLICT (source, external_id) DO UPDATE SET
+       event_id = EXCLUDED.event_id, url = EXCLUDED.url,
+       raw = EXCLUDED.raw, ingested_at = NOW()`,
+    [p.eventId, p.source, p.externalId, p.url, JSON.stringify(p.raw)]
+  )
+}
+
+// Provenance for the UI ("also listed on …").
+export async function getEventSources(
+  eventId: string
+): Promise<{ source: string; external_id: string; url: string | null }[]> {
+  const db = await getDb()
+  return db.query(
+    `SELECT source, external_id, url FROM event_sources WHERE event_id = $1 ORDER BY source ASC`,
+    [eventId]
+  )
 }
 
 export async function setEventCategories(eventId: string, categoryIds: number[]): Promise<void> {
