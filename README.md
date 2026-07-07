@@ -104,6 +104,16 @@ Add the same env vars in the Vercel dashboard. The crons in
 [`vercel.json`](vercel.json) then run the daily scan (6am), daily digest (8am),
 and weekly digest (Mon 2pm) automatically.
 
+**Migrations on deploy.** Postgres does not auto-migrate at runtime, so schema
+changes must reach the shared DB before the code that needs them. CI applies them
+for you: on every push to `main`, the `migrate` job in
+[`ci.yml`](.github/workflows/ci.yml) runs `npm run migrate` — add a `DATABASE_URL`
+repo secret (the Supabase pooler string) under **Settings → Secrets and variables
+→ Actions** to enable it. Until that secret is set the step no-ops. Preview
+deployments query the same DB, so a branch that adds a migration only previews
+correctly once its migration is on the DB (run `npm run migrate` locally, or merge
+to `main`).
+
 ## Observability
 
 `GET /api/admin/health` (auth'd) returns the last runs per source and flags any
