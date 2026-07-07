@@ -83,7 +83,7 @@ export async function listEvents(opts: {
   const fromIso = opts.from && opts.from > nowIso ? opts.from : nowIso
 
   const params: unknown[] = [fromIso]
-  let where = 'e.start_time >= $1'
+  let where = `e.start_time >= $1 AND e.status = 'approved'`
 
   if (opts.to) {
     params.push(opts.to)
@@ -128,7 +128,7 @@ export async function countEvents(opts: {
   const fromIso = opts.from && opts.from > nowIso ? opts.from : nowIso
 
   const params: unknown[] = [fromIso]
-  let where = 'e.start_time >= $1'
+  let where = `e.start_time >= $1 AND e.status = 'approved'`
   if (opts.to) { params.push(opts.to); where += ` AND e.start_time <= $${params.length}` }
   if (opts.q) { params.push(opts.q); where += ` AND ${FTS_MATCH.replace('$PARAM', `$${params.length}`)}` }
   if (opts.categories && opts.categories.length > 0) {
@@ -150,7 +150,7 @@ export async function getEvent(id: string): Promise<EnrichedEvent | null> {
   const db = await getDb()
   const nowIso = new Date().toISOString()
   const rows = await db.query<Record<string, unknown>>(
-    `SELECT e.*, ${CATEGORIES_JSON}, ${SOURCES_JSON} FROM events e WHERE e.id = $1`,
+    `SELECT e.*, ${CATEGORIES_JSON}, ${SOURCES_JSON} FROM events e WHERE e.id = $1 AND e.status = 'approved'`,
     [id]
   )
   if (rows.length === 0) return null
@@ -208,18 +208,19 @@ export async function findDedupCandidates(opts: {
 // Insert a brand-new canonical event. Caller supplies the normalized keys.
 export async function insertEvent(
   raw: RawEvent,
-  keys: { cityId: number; titleNorm: string; venueNorm: string | null }
+  keys: { cityId: number; titleNorm: string; venueNorm: string | null; status?: 'pending' | 'approved' | 'rejected' }
 ): Promise<string> {
   const db = await getDb()
   const rows = await db.query<{ id: string }>(
     `INSERT INTO events (title, description, start_time, end_time, venue_name,
        venue_address, image_url, ticket_url, source, source_id, is_free,
-       price_min, price_max, city_id, title_norm, venue_norm, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16, NOW())
+       price_min, price_max, city_id, title_norm, venue_norm, status, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, NOW())
      RETURNING id`,
     [raw.title, raw.description, raw.start_time, raw.end_time, raw.venue_name,
      raw.venue_address, raw.image_url, raw.ticket_url, raw.source, raw.source_id,
-     raw.is_free, raw.price_min, raw.price_max, keys.cityId, keys.titleNorm, keys.venueNorm]
+     raw.is_free, raw.price_min, raw.price_max, keys.cityId, keys.titleNorm, keys.venueNorm,
+     keys.status ?? 'approved']
   )
   return rows[0].id
 }
@@ -288,6 +289,41 @@ export async function getEventSources(
     `SELECT source, external_id, url FROM event_sources WHERE event_id = $1 ORDER BY source ASC`,
     [eventId]
   )
+}
+
+// ---------------------------------------------------------------------------
+// Moderation — user-submission queue (Phase 2C)
+// ---------------------------------------------------------------------------
+export type PendingEvent = {
+  id: string
+  title: string
+  start_time: string
+  venue_name: string | null
+  source: string
+  source_id: string | null
+  ticket_url: string | null
+  created_at: string
+}
+
+// The moderation queue: pending events newest-first for admin review.
+export async function listPendingEvents(limit: number): Promise<PendingEvent[]> {
+  const db = await getDb()
+  return db.query<PendingEvent>(
+    `SELECT id, title, start_time, venue_name, source, source_id, ticket_url, created_at
+     FROM events WHERE status = 'pending'
+     ORDER BY created_at DESC
+     LIMIT $1`,
+    [limit]
+  )
+}
+
+// Approve/reject a submission. Idempotent; only touches the status column.
+export async function setEventStatus(
+  id: string,
+  status: 'approved' | 'rejected'
+): Promise<void> {
+  const db = await getDb()
+  await db.query(`UPDATE events SET status = $2, updated_at = NOW() WHERE id = $1`, [id, status])
 }
 
 export async function setEventCategories(eventId: string, categoryIds: number[]): Promise<void> {
@@ -469,7 +505,7 @@ export async function getEventsBetween(startIso: string, endIso: string): Promis
   const nowIso = new Date().toISOString()
   const rows = await db.query<Record<string, unknown>>(
     `SELECT e.*, ${CATEGORIES_JSON}
-     FROM events e WHERE e.start_time >= $1 AND e.start_time <= $2
+     FROM events e WHERE e.start_time >= $1 AND e.start_time <= $2 AND e.status = 'approved'
      ORDER BY e.start_time ASC`,
     [startIso, endIso]
   )
