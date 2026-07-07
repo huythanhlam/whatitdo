@@ -383,6 +383,20 @@ describe('admin moderation queries (Phase 2C)', () => {
   })
 })
 
+describe('isFree filter (Phase 2D)', () => {
+  it('returns only free events when isFree is set', async () => {
+    const soon = new Date(Date.now() + 10 * 24 * 3600 * 1000).toISOString()
+    await persistEvents([
+      mk({ title: 'Free Yoga In The Park', source: 'crawl', source_id: 'free-1', is_free: true, start_time: soon }),
+      mk({ title: 'Paid Yoga Workshop', source: 'crawl', source_id: 'paid-1', is_free: false, price_min: 20, start_time: soon }),
+    ])
+    const free = await listEvents({ q: 'Yoga', isFree: true, limit: 20, offset: 0 })
+    expect(free.some(e => e.source_id === 'free-1')).toBe(true)
+    expect(free.some(e => e.source_id === 'paid-1')).toBe(false)
+    expect(await countEvents({ q: 'Yoga', isFree: true })).toBeGreaterThanOrEqual(1)
+  })
+})
+
 function mk(overrides: Partial<RawEvent>): RawEvent {
   return {
     title: 'Integration Test Show',

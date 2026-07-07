@@ -75,6 +75,7 @@ export async function listEvents(opts: {
   categories?: string[]
   from?: string
   to?: string
+  isFree?: boolean
   limit: number
   offset: number
 }): Promise<EnrichedEvent[]> {
@@ -100,6 +101,9 @@ export async function listEvents(opts: {
       JOIN categories c ON c.id = ec.category_id
       WHERE c.slug = ANY($${params.length}))`
   }
+  if (opts.isFree) {
+    where += ` AND e.is_free = true`
+  }
   params.push(opts.limit)
   params.push(opts.offset)
 
@@ -122,6 +126,7 @@ export async function countEvents(opts: {
   categories?: string[]
   from?: string
   to?: string
+  isFree?: boolean
 }): Promise<number> {
   const db = await getDb()
   const nowIso = new Date().toISOString()
@@ -136,6 +141,7 @@ export async function countEvents(opts: {
     where += ` AND e.id IN (SELECT ec.event_id FROM event_categories ec
       JOIN categories c ON c.id = ec.category_id WHERE c.slug = ANY($${params.length}))`
   }
+  if (opts.isFree) { where += ` AND e.is_free = true` }
   const rows = await db.query<{ count: string }>(
     `SELECT COUNT(*)::text AS count FROM events e WHERE ${where}`,
     params
