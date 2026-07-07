@@ -1,42 +1,47 @@
-import type { SourceAdapter } from './types'
-import { isLocal } from '@/lib/db'
+import type { SourceParser, RawEvent } from './types'
 import { fetchEventbriteEvents } from './eventbrite'
-import { fetchIcalEvents } from './ical'
+import { fetchIcalUrl } from './ical'
 import { fetchTicketmasterEvents } from './ticketmaster'
 import { fetchSeatGeekEvents } from './seatgeek'
-import { fetchNewspaperEvents } from './newspapers'
-import { fetchSocialEvents } from './social'
+import { fetchBlueskyEvents } from './social'
 import { fetchYoutubeEvents } from './youtube'
-import { fetchCrawlEvents } from './crawler'
-import { fetchSeedEvents } from './seed'
+import { fetchCrawlSource } from './crawler'
+import { fetchFeed } from './rss'
+import { extractEvents } from '@/lib/extractor'
 
 const has = (v: string | undefined): boolean => !!v && v.length > 0
+const hasGeminiKey = () => has(process.env.GEMINI_API_KEY)
 
-// The single source registry. Every source implements the same contract; the
-// orchestrator (app/api/ingest/route.ts) iterates this list, so adding or
-// gating a source is a one-line change here. `enabled()` is the honest answer
-// to "can this source produce anything right now?" — a source that returns
-// false is recorded as `skipped`, never mistaken for a dead/empty source.
-//
-// The existing parsers take no arguments yet; adapters accept the SourceContext
-// (for the coming multi-city/incremental work) and ignore it for now.
-export const SOURCES: SourceAdapter[] = [
-  // Structured sources — no Gemini, always on.
-  { name: 'eventbrite', kind: 'jsonld', enabled: () => true, fetch: () => fetchEventbriteEvents() },
-  { name: 'ical',       kind: 'ical',   enabled: () => true, fetch: () => fetchIcalEvents() },
+// Wrap a plain RawEvent[] producer as a non-skipping parser (only `crawl`
+// content-hashes, so everyone else always reports skipped:false).
+const simple = (
+  available: () => boolean,
+  fetch: (url: string | null, name: string) => Promise<RawEvent[]>
+): SourceParser => ({
+  available,
+  fetch: async (source) => ({ events: await fetch(source.url, source.name), skipped: false }),
+})
+
+// The parser registry: `SourceRow.parser` → mechanism. Instances (which
+// feeds/venues/APIs) live in the `sources` table; this holds only the code that
+// knows HOW to fetch each kind. Adding coverage of an existing kind is a DB
+// INSERT; a genuinely new mechanism is one entry here.
+export const PARSERS: Record<string, SourceParser> = {
+  // Structured — no Gemini, always available.
+  eventbrite: simple(() => true, () => fetchEventbriteEvents()),
+  ical:       simple(() => true, (url, name) => fetchIcalUrl(url!, name)),
 
   // API-key gated.
-  { name: 'ticketmaster', kind: 'api', enabled: () => has(process.env.TICKETMASTER_API_KEY), fetch: () => fetchTicketmasterEvents() },
-  { name: 'seatgeek',     kind: 'api', enabled: () => has(process.env.SEATGEEK_CLIENT_ID),   fetch: () => fetchSeatGeekEvents() },
+  ticketmaster: simple(() => has(process.env.TICKETMASTER_API_KEY), () => fetchTicketmasterEvents()),
+  seatgeek:     simple(() => has(process.env.SEATGEEK_CLIENT_ID),   () => fetchSeatGeekEvents()),
 
-  // Gemini-extracted (free text → events); need GEMINI_API_KEY.
-  { name: 'newspapers', kind: 'rss',   enabled: () => has(process.env.GEMINI_API_KEY), fetch: () => fetchNewspaperEvents() },
-  { name: 'social',     kind: 'crawl', enabled: () => has(process.env.GEMINI_API_KEY), fetch: () => fetchSocialEvents() },
-  { name: 'crawl',      kind: 'crawl', enabled: () => has(process.env.GEMINI_API_KEY), fetch: () => fetchCrawlEvents() },
-  // YouTube needs both its API key and Gemini to extract event details.
-  { name: 'youtube', kind: 'api', enabled: () => has(process.env.YOUTUBE_API_KEY) && has(process.env.GEMINI_API_KEY), fetch: () => fetchYoutubeEvents() },
+  // Gemini-extracted free text.
+  rss:     simple(hasGeminiKey, (url, name) => fetchFeed(url!, name, { limit: 20 }).then(extractEvents)),
+  bluesky: simple(hasGeminiKey, () => fetchBlueskyEvents()),
 
-  // Deterministic seed — dev only. In production the real sources fill the DB;
-  // the seed exists so the zero-credential PGlite mode is never empty.
-  { name: 'seed', kind: 'seed', enabled: () => isLocal(), fetch: () => fetchSeedEvents() },
-]
+  // Crawl: content-hash aware, returns its own skip flag.
+  crawl: { available: hasGeminiKey, fetch: (source, ctx) => fetchCrawlSource(source, ctx) },
+
+  // YouTube needs both its API key and Gemini.
+  youtube: simple(() => has(process.env.YOUTUBE_API_KEY) && hasGeminiKey(), () => fetchYoutubeEvents()),
+}

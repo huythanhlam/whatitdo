@@ -248,6 +248,32 @@ describe('sources table (migration 008)', () => {
   })
 })
 
+describe('source_runs source_id (Phase 2B)', () => {
+  it('stamps source_id on the run row', async () => {
+    const db = await getPgliteDb()
+    const src = (await db.query<{ id: number }>(`SELECT id FROM sources WHERE name = 'eventbrite'`))[0]
+    const runId = await startSourceRun('eventbrite', src.id)
+    await finishSourceRun(runId, { status: 'ok', events_found: 1, events_upserted: 1 })
+    const row = (await db.query<{ source_id: number }>(
+      `SELECT source_id FROM source_runs WHERE id = $1`, [runId]
+    ))[0]
+    expect(row.source_id).toBe(src.id)
+  })
+})
+
+describe('event_sources.source_id backfill + stamping (migration 009)', () => {
+  it('stamps source_id from sources.name on new provenance rows', async () => {
+    const db = await getPgliteDb()
+    const ev = (await db.query<{ id: string }>(`SELECT id FROM events LIMIT 1`))[0]
+    await recordProvenance({ eventId: ev.id, source: 'eventbrite', externalId: 'eb-test-1', url: null, raw: {} })
+    const row = (await db.query<{ source_id: number | null }>(
+      `SELECT es.source_id FROM event_sources es WHERE es.external_id = 'eb-test-1'`
+    ))[0]
+    const eb = (await db.query<{ id: number }>(`SELECT id FROM sources WHERE name = 'eventbrite'`))[0]
+    expect(row.source_id).toBe(eb.id)
+  })
+})
+
 describe('source queries (Phase 2B)', () => {
   it('getEnabledSources returns Austin enabled rows only', async () => {
     const rows = await getEnabledSources(1)

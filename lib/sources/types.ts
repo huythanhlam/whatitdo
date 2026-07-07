@@ -56,3 +56,14 @@ export type SourceRow = {
   notes: string | null
 }
 
+// A parser MECHANISM. Instances live in the DB (`SourceRow`); the code registry
+// maps `SourceRow.parser` → one of these. `available()` replaces the old
+// per-source enabled() API-key check: enabled(DB) AND available(code) must both
+// hold or the run is recorded as `skipped`. `crawl` returns a skip flag so the
+// orchestrator can distinguish "unchanged, didn't spend Gemini" from "found
+// nothing".
+export interface SourceParser {
+  available(): boolean
+  fetch(source: SourceRow, ctx: SourceContext): Promise<{ events: RawEvent[]; skipped: boolean }>
+}
+

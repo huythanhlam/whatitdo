@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { SOURCES } from '@/lib/sources/registry'
-import type { SourceAdapter, SourceContext } from '@/lib/sources/types'
+import { PARSERS } from '@/lib/sources/registry'
+import type { SourceRow, SourceContext } from '@/lib/sources/types'
 import { persistEvents } from '@/lib/persist'
-import { isLocal, startSourceRun, finishSourceRun } from '@/lib/db'
+import { isLocal, getEnabledSources, startSourceRun, finishSourceRun, touchSourceSuccess } from '@/lib/db'
 import { withGeminiMeter } from '@/lib/gemini'
 import { requireCronAuth } from '@/lib/auth'
 
 export const maxDuration = 300
 
-function contextFor(source: SourceAdapter): SourceContext {
+// Austin until Phase 3 wires multi-city through the orchestrator.
+const CITY_ID = 1
+
+function contextFor(source: SourceRow): SourceContext {
   return {
     city: 'austin',
     since: new Date(),
@@ -20,25 +23,39 @@ function contextFor(source: SourceAdapter): SourceContext {
   }
 }
 
-// Run one source end to end, wrapped in a source_runs record so a dead source
-// shows up as `error`/zero-events rather than silently contributing nothing.
-async function runSource(source: SourceAdapter): Promise<{ upserted: number; found: number; rejected: number }> {
-  if (!source.enabled()) {
-    const id = await startSourceRun(source.name)
-    await finishSourceRun(id, { status: 'skipped' })
+// Run one configured source end to end, wrapped in a source_runs record linked to
+// its sources row. A missing parser or unavailable mechanism (no API key) is a
+// visible `skipped`, never a silent empty source.
+async function runSource(source: SourceRow): Promise<{ upserted: number; found: number; rejected: number }> {
+  const parser = PARSERS[source.parser]
+  if (!parser || !parser.available()) {
+    const id = await startSourceRun(source.name, source.id)
+    await finishSourceRun(id, {
+      status: 'skipped',
+      error: parser ? 'parser unavailable (missing key)' : `unknown parser: ${source.parser}`,
+    })
     return { upserted: 0, found: 0, rejected: 0 }
   }
 
-  const id = await startSourceRun(source.name)
+  const id = await startSourceRun(source.name, source.id)
   try {
     // Scope a Gemini meter to this source so its fetch-time extraction and
     // persist-time tagging requests are attributed to it, even though sources
     // run concurrently.
     const { result, meter } = await withGeminiMeter(async () => {
-      const events = await source.fetch(contextFor(source))
-      return persistEvents(events)
+      const { events, skipped } = await parser.fetch(source, contextFor(source))
+      if (skipped) return { skipped: true as const, persist: null }
+      return { skipped: false as const, persist: await persistEvents(events) }
     })
-    const { inserted, rejected, total } = result
+
+    if (result.skipped) {
+      // Content-hash short-circuit: page unchanged, no Gemini spent.
+      await finishSourceRun(id, { status: 'skipped', error: 'unchanged since last crawl' })
+      await touchSourceSuccess(source.id)
+      return { upserted: 0, found: 0, rejected: 0 }
+    }
+
+    const { inserted, rejected, total } = result.persist!
 
     // A source shut out entirely by the daily budget (made zero requests, all
     // deferred, no events) is recorded as skipped-for-budget so it's visible and
@@ -52,6 +69,7 @@ async function runSource(source: SourceAdapter): Promise<{ upserted: number; fou
       gemini_requests: meter.requests,
       error: meter.skippedForBudget > 0 ? `${meter.skippedForBudget} Gemini calls skipped (daily budget)` : null,
     })
+    if (!budgetBlocked) await touchSourceSuccess(source.id)
     return { upserted: inserted, found: total, rejected }
   } catch (e) {
     console.error(`Source ${source.name} failed:`, e)
@@ -61,10 +79,12 @@ async function runSource(source: SourceAdapter): Promise<{ upserted: number; fou
 }
 
 async function runIngest() {
-  // Sources run concurrently, but each owns its own run record + persistence, so
-  // per-source counts land in source_runs even when one source throws.
+  // Ingestion is driven entirely by the `sources` table (Phase 2B): enabled rows
+  // for the city, each dispatched to its parser mechanism. Adding coverage is an
+  // INSERT, not a code change. Sources run concurrently; each owns its run record.
+  const sources = await getEnabledSources(CITY_ID)
   const results = await Promise.all(
-    SOURCES.map(async source => ({ name: source.name, ...(await runSource(source)) }))
+    sources.map(async source => ({ name: source.name, ...(await runSource(source)) }))
   )
 
   const bySource: Record<string, number> = {}

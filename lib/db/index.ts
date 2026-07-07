@@ -267,12 +267,14 @@ export async function recordProvenance(p: {
   raw: unknown
 }): Promise<void> {
   const db = await getDb()
+  // source_id resolves from sources.name (Phase 2B) — a subquery so ingest and
+  // import share one path; NULL when no matching row (e.g. 'seed'/'import').
   await db.query(
-    `INSERT INTO event_sources (event_id, source, external_id, url, raw, ingested_at)
-     VALUES ($1, $2, $3, $4, $5, NOW())
+    `INSERT INTO event_sources (event_id, source, source_id, external_id, url, raw, ingested_at)
+     VALUES ($1, $2, (SELECT id FROM sources WHERE name = $2), $3, $4, $5, NOW())
      ON CONFLICT (source, external_id) DO UPDATE SET
-       event_id = EXCLUDED.event_id, url = EXCLUDED.url,
-       raw = EXCLUDED.raw, ingested_at = NOW()`,
+       event_id = EXCLUDED.event_id, source_id = EXCLUDED.source_id,
+       url = EXCLUDED.url, raw = EXCLUDED.raw, ingested_at = NOW()`,
     [p.eventId, p.source, p.externalId, p.url, JSON.stringify(p.raw)]
   )
 }
@@ -399,6 +401,7 @@ export async function touchSourceSuccess(id: number): Promise<void> {
 export type SourceRun = {
   id: number
   source: string
+  source_id: number | null
   started_at: string
   finished_at: string | null
   status: 'running' | 'ok' | 'error' | 'skipped'
@@ -409,13 +412,14 @@ export type SourceRun = {
   error: string | null
 }
 
-// Open a run (status 'running'); returns its id so the orchestrator can close
-// it with the final counts once the source finishes.
-export async function startSourceRun(source: string): Promise<number> {
+// Open a run (status 'running'); returns its id so the orchestrator can close it
+// with the final counts. `sourceId` links the run to its `sources` row (Phase
+// 2B); null for legacy/ad-hoc callers.
+export async function startSourceRun(source: string, sourceId?: number | null): Promise<number> {
   const db = await getDb()
   const rows = await db.query<{ id: number }>(
-    `INSERT INTO source_runs (source, status) VALUES ($1, 'running') RETURNING id`,
-    [source]
+    `INSERT INTO source_runs (source, source_id, status) VALUES ($1, $2, 'running') RETURNING id`,
+    [source, sourceId ?? null]
   )
   return rows[0].id
 }
