@@ -39,3 +39,20 @@ export interface SourceAdapter {
   fetch(ctx: SourceContext): Promise<RawEvent[]>
 }
 
+// A configured source instance (one row of the `sources` table). The code holds
+// parser MECHANISMS; the database holds these INSTANCES. `name` is the exact
+// RawEvent.source string the row's parser emits, so provenance links back by name.
+export type SourceRow = {
+  id: number
+  city_id: number
+  name: string
+  kind: SourceKind
+  url: string | null
+  parser: string
+  cadence: 'daily' | 'weekly'
+  enabled: boolean
+  last_success: string | null
+  content_hash: string | null
+  notes: string | null
+}
+

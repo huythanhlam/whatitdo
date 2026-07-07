@@ -18,6 +18,10 @@ import {
   findDedupCandidates,
   recordProvenance,
   getEventSources,
+  getEnabledSources,
+  getSourceContentHash,
+  setSourceContentHash,
+  touchSourceSuccess,
 } from './index'
 import { persistEvents } from '@/lib/persist'
 import type { RawEvent } from '@/lib/sources/types'
@@ -241,6 +245,27 @@ describe('sources table (migration 008)', () => {
     expect(names.has('eventbrite')).toBe(true)
     expect(names.has('ticketmaster')).toBe(true)
     expect(names.has('newspaper:kut')).toBe(true)
+  })
+})
+
+describe('source queries (Phase 2B)', () => {
+  it('getEnabledSources returns Austin enabled rows only', async () => {
+    const rows = await getEnabledSources(1)
+    expect(rows.length).toBeGreaterThanOrEqual(15)
+    expect(rows.every(r => r.enabled && r.city_id === 1)).toBe(true)
+    const eb = rows.find(r => r.name === 'eventbrite')
+    expect(eb?.parser).toBe('eventbrite')
+  })
+
+  it('content hash round-trips and touchSourceSuccess sets last_success', async () => {
+    const rows = await getEnabledSources(1)
+    const crawl = rows.find(r => r.parser === 'crawl')!
+    expect(await getSourceContentHash(crawl.id)).toBeNull()
+    await setSourceContentHash(crawl.id, 'deadbeef')
+    expect(await getSourceContentHash(crawl.id)).toBe('deadbeef')
+    await touchSourceSuccess(crawl.id)
+    const after = await getEnabledSources(1)
+    expect(after.find(r => r.id === crawl.id)!.last_success).not.toBeNull()
   })
 })
 

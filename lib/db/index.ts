@@ -1,7 +1,7 @@
 import type { Db } from './driver'
 import { getPgDb } from './pg'
 import { getPgliteDb } from './pglite'
-import type { RawEvent } from '@/lib/sources/types'
+import type { RawEvent, SourceRow } from '@/lib/sources/types'
 import type { ExistingEvent, Candidate, FieldPatch } from '@/lib/dedup'
 
 // Returns true when no direct Postgres connection is configured — the app then
@@ -352,6 +352,45 @@ export async function addFeatured(f: {
     [f.event_id, f.starts_at, f.ends_at, f.ad_label]
   )
   return rows[0] ?? null
+}
+
+// ---------------------------------------------------------------------------
+// Sources — config-driven ingestion instances (Phase 2B)
+// ---------------------------------------------------------------------------
+
+// Enabled source rows for a city, oldest-successful first so stale/never-run
+// sources are prioritized by the orchestrator.
+export async function getEnabledSources(cityId: number): Promise<SourceRow[]> {
+  const db = await getDb()
+  return db.query<SourceRow>(
+    `SELECT id, city_id, name, kind, url, parser, cadence, enabled,
+            last_success, content_hash, notes
+     FROM sources
+     WHERE city_id = $1 AND enabled = true
+     ORDER BY last_success ASC NULLS FIRST, id ASC`,
+    [cityId]
+  )
+}
+
+export async function getSourceContentHash(id: number): Promise<string | null> {
+  const db = await getDb()
+  const rows = await db.query<{ content_hash: string | null }>(
+    `SELECT content_hash FROM sources WHERE id = $1`,
+    [id]
+  )
+  return rows[0]?.content_hash ?? null
+}
+
+export async function setSourceContentHash(id: number, hash: string): Promise<void> {
+  const db = await getDb()
+  await db.query(`UPDATE sources SET content_hash = $2 WHERE id = $1`, [id, hash])
+}
+
+// Record a successful fetch (any events or a valid unchanged skip). Powers the
+// oldest-first ordering above and, later, source-staleness alerting.
+export async function touchSourceSuccess(id: number): Promise<void> {
+  const db = await getDb()
+  await db.query(`UPDATE sources SET last_success = NOW() WHERE id = $1`, [id])
 }
 
 // ---------------------------------------------------------------------------
