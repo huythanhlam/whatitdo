@@ -120,6 +120,12 @@ export default async function HomePage({
             </Suspense>
           </div>
           <Link
+            href="/submit"
+            className="shrink-0 text-sm text-violet-600 hover:underline font-medium whitespace-nowrap hidden sm:inline"
+          >
+            Submit event
+          </Link>
+          <Link
             href="/subscribe"
             className="shrink-0 text-sm bg-violet-600 text-white px-3 py-1.5 rounded-md hover:bg-violet-700 transition-colors font-medium"
           >
