@@ -9,6 +9,7 @@ import { listEvents, countEvents } from '@/lib/db'
 import { resolveDateRange } from '@/lib/dateRanges'
 import { gridRangeIso, currentCentralMonth } from '@/lib/calendar'
 import { DateFilter } from '@/components/DateFilter'
+import { SiteFooter } from '@/components/SiteFooter'
 import type { EnrichedEvent } from '@/lib/types'
 
 // Content changes about once a day (the ingest cron), so serve cached HTML and
@@ -178,6 +179,8 @@ export default async function HomePage({
           )}
         </main>
       </div>
+
+      <SiteFooter />
     </div>
   )
 }

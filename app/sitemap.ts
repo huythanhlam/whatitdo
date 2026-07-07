@@ -1,6 +1,7 @@
 import type { MetadataRoute } from 'next'
 import { listEvents } from '@/lib/db'
 import { getBaseUrl } from '@/lib/site'
+import { LANDING_PAGES } from '@/lib/landingPages'
 
 // Regenerate hourly; event content changes at most once a day.
 export const revalidate = 3600
@@ -26,9 +27,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
   })
 
+  const landingUrls: MetadataRoute.Sitemap = LANDING_PAGES.map(p => ({
+    url: `${base}/${p.slug}`,
+    changeFrequency: 'daily',
+    priority: 0.8,
+  }))
+
   return [
     { url: base, changeFrequency: 'hourly', priority: 1 },
+    ...landingUrls,
     { url: `${base}/subscribe`, changeFrequency: 'monthly', priority: 0.3 },
+    { url: `${base}/submit`, changeFrequency: 'monthly', priority: 0.3 },
     ...eventUrls,
   ]
 }
