@@ -82,6 +82,21 @@ describe('persistEvents against PGlite', () => {
   })
 })
 
+describe('persistEvents opts defaulting', () => {
+  it('defaults cityId to 1 and status to approved when opts is omitted entirely', async () => {
+    const soon = new Date(Date.now() + 6 * 24 * 3600 * 1000).toISOString()
+    const e: RawEvent = mk({ source: 'itest', source_id: 'opts-default-1', title: 'Opts Default Test Show', start_time: soon })
+
+    // Called with NO second argument at all — exercises persistEvents's own
+    // internal defaulting (cityId ?? 1), not a caller-supplied default.
+    const res = await persistEvents([e])
+    expect(res.inserted).toBe(1)
+
+    const found = await listEvents({ cityId: 1, q: 'Opts Default Test Show', limit: 5, offset: 0 })
+    expect(found.some(x => x.source_id === 'opts-default-1')).toBe(true)
+  })
+})
+
 describe('subscription lifecycle against PGlite', () => {
   it('adds, lists, and removes a subscription (token from DB default)', async () => {
     const token = await addSubscription({ email: 'itest@example.com', frequency: 'weekly', category_slugs: ['music'], cityId: 1 })

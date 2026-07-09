@@ -6,7 +6,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const citySlug = searchParams.get('city') ?? ''
   const city = citySlug ? await getCityBySlug(citySlug) : null
-  if (!city) return NextResponse.json({ error: 'A valid "city" query param is required' }, { status: 400 })
+  if (!city || !city.enabled) return NextResponse.json({ error: 'A valid "city" query param is required' }, { status: 400 })
 
   const q = searchParams.get('q') ?? ''
   const categories = searchParams.getAll('category')

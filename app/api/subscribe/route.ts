@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
   }
 
   const city = citySlug ? await getCityBySlug(citySlug) : null
-  if (!city) return NextResponse.json({ error: 'Unknown city' }, { status: 400 })
+  if (!city || !city.enabled) return NextResponse.json({ error: 'Unknown city' }, { status: 400 })
 
   const validSlugs = rawSlugs.filter((s: unknown): s is string =>
     typeof s === 'string' && (CATEGORY_SLUGS as string[]).includes(s))
