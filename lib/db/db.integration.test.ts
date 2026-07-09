@@ -38,18 +38,18 @@ beforeAll(() => {
 
 describe('read layer against seeded PGlite', () => {
   it('lists seeded events with joined categories', async () => {
-    const events = await listEvents({ limit: 24, offset: 0 })
+    const events = await listEvents({ cityId: 1, limit: 24, offset: 0 })
     expect(events.length).toBeGreaterThan(0)
     const withCats = events.find(e => (e.categories as unknown[]).length > 0)
     expect(withCats).toBeTruthy()
   })
 
   it('countEvents agrees the DB is non-empty', async () => {
-    expect(await countEvents({})).toBeGreaterThan(0)
+    expect(await countEvents({ cityId: 1 })).toBeGreaterThan(0)
   })
 
   it('getEvent returns a single enriched event by id', async () => {
-    const [first] = await listEvents({ limit: 1, offset: 0 })
+    const [first] = await listEvents({ cityId: 1, limit: 1, offset: 0 })
     const one = await getEvent(first.id)
     expect(one?.id).toBe(first.id)
     expect(one).toHaveProperty('categories')
@@ -60,7 +60,7 @@ describe('read layer against seeded PGlite', () => {
   })
 
   it('full-text search matches on content', async () => {
-    const events = await listEvents({ q: 'music', limit: 24, offset: 0 })
+    const events = await listEvents({ cityId: 1, q: 'music', limit: 24, offset: 0 })
     // seed data includes music events; FTS should find at least one
     expect(Array.isArray(events)).toBe(true)
   })
@@ -77,21 +77,21 @@ describe('persistEvents against PGlite', () => {
     expect(res.rejected).toBe(1)
     expect(res.total).toBe(2)
 
-    const found = await listEvents({ q: 'Integration Test Show', limit: 5, offset: 0 })
+    const found = await listEvents({ cityId: 1, q: 'Integration Test Show', limit: 5, offset: 0 })
     expect(found.some(e => e.source_id === 'itest-good')).toBe(true)
   })
 })
 
 describe('subscription lifecycle against PGlite', () => {
   it('adds, lists, and removes a subscription (token from DB default)', async () => {
-    const token = await addSubscription({ email: 'itest@example.com', frequency: 'weekly', category_slugs: ['music'] })
+    const token = await addSubscription({ email: 'itest@example.com', frequency: 'weekly', category_slugs: ['music'], cityId: 1 })
     expect(token).toBeTruthy()
 
-    const subs = await listSubscriptions('weekly')
+    const subs = await listSubscriptions('weekly', 1)
     expect(subs.some(s => s.email === 'itest@example.com')).toBe(true)
 
     await removeSubscription(token!)
-    const after = await listSubscriptions('weekly')
+    const after = await listSubscriptions('weekly', 1)
     expect(after.some(s => s.email === 'itest@example.com')).toBe(false)
   })
 })
@@ -100,7 +100,7 @@ describe('getEventsBetween', () => {
   it('returns events within a window, ordered by start', async () => {
     const from = new Date(Date.now() - 24 * 3600 * 1000).toISOString()
     const to = new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString()
-    const events = await getEventsBetween(from, to)
+    const events = await getEventsBetween(1, from, to)
     for (let i = 1; i < events.length; i++) {
       expect(new Date(events[i].start_time as string).getTime())
         .toBeGreaterThanOrEqual(new Date(events[i - 1].start_time as string).getTime())
