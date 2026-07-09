@@ -142,6 +142,40 @@ describe('source_runs ledger', () => {
   })
 })
 
+describe('recentSourceRuns city scoping', () => {
+  it('scopes runs by cityId via the sources join, excluding null-source_id rows', async () => {
+    const db = await getPgliteDb()
+    const austinSrc = (await db.query<{ id: number }>(
+      `SELECT id FROM sources WHERE name = 'eventbrite'`
+    ))[0]
+    const houstonSrc = (await db.query<{ id: number }>(
+      `SELECT id FROM sources WHERE name = 'ticketmaster:houston'`
+    ))[0]
+    expect(austinSrc).toBeTruthy()
+    expect(houstonSrc).toBeTruthy()
+
+    const austinRunId = await startSourceRun('eventbrite', austinSrc.id)
+    await finishSourceRun(austinRunId, { status: 'ok', events_found: 1, events_upserted: 1 })
+
+    const houstonRunId = await startSourceRun('ticketmaster:houston', houstonSrc.id)
+    await finishSourceRun(houstonRunId, { status: 'ok', events_found: 1, events_upserted: 1 })
+
+    const austinOnly = await recentSourceRuns(10, 1)
+    expect(austinOnly.some(r => r.id === austinRunId)).toBe(true)
+    expect(austinOnly.some(r => r.id === houstonRunId)).toBe(false)
+
+    const houstonOnly = await recentSourceRuns(10, 2)
+    expect(houstonOnly.some(r => r.id === houstonRunId)).toBe(true)
+    expect(houstonOnly.some(r => r.id === austinRunId)).toBe(false)
+
+    // Unscoped call (no cityId) preserves the existing global behavior and
+    // includes both, plus the NULL-source_id legacy run from the test above.
+    const all = await recentSourceRuns(10)
+    expect(all.some(r => r.id === austinRunId)).toBe(true)
+    expect(all.some(r => r.id === houstonRunId)).toBe(true)
+  })
+})
+
 describe('dedup-foundation migration', () => {
   it('applies the dedup-foundation migration on a fresh PGlite instance', async () => {
     const db = await getPgliteDb()

@@ -33,7 +33,7 @@ export default function AdminPage() {
     const headers = { Authorization: `Bearer ${t}` }
     Promise.all([
       fetch(`/api/admin/pending?city=${city}`, { headers }),
-      fetch(`/api/admin/health`, { headers }),
+      fetch(`/api/admin/health?city=${city}`, { headers }),
     ])
       .then(([pRes, hRes]) => {
         if (!pRes.ok || !hRes.ok) throw new Error('Unauthorized or request failed')

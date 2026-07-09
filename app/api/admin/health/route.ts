@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { recentSourceRuns, type SourceRun } from '@/lib/db'
+import { recentSourceRuns, getCityBySlug, type SourceRun } from '@/lib/db'
 import { requireCronAuth } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
@@ -31,7 +31,12 @@ export async function GET(req: NextRequest) {
   const denied = requireCronAuth(req)
   if (denied) return denied
 
-  const runs = await recentSourceRuns(WINDOW)
+  const citySlug = req.nextUrl.searchParams.get('city')
+  if (!citySlug) return NextResponse.json({ error: 'city query param is required' }, { status: 400 })
+  const city = await getCityBySlug(citySlug)
+  if (!city) return NextResponse.json({ error: 'Unknown city' }, { status: 404 })
+
+  const runs = await recentSourceRuns(WINDOW, city.id)
 
   const bySource = new Map<string, SourceRun[]>()
   for (const r of runs) {

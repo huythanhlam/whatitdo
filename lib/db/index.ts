@@ -502,9 +502,26 @@ export async function finishSourceRun(
 }
 
 // The most recent `perSource` runs for each source, newest first — the raw
-// material for /api/admin/health's staleness check.
-export async function recentSourceRuns(perSource: number): Promise<SourceRun[]> {
+// material for /api/admin/health's staleness check. When `cityId` is given,
+// only runs whose source_id joins to a `sources` row in that city are
+// included (an INNER JOIN, so legacy/ad-hoc runs with a NULL source_id are
+// naturally excluded — they can't be attributed to any city). The city filter
+// is applied to the OUTER query, not the window-function partition, so the
+// per-source "last N runs" ranking is unaffected by the join.
+export async function recentSourceRuns(perSource: number, cityId?: number): Promise<SourceRun[]> {
   const db = await getDb()
+  if (cityId !== undefined) {
+    return db.query<SourceRun>(
+      `SELECT t.* FROM (
+         SELECT sr.*, ROW_NUMBER() OVER (PARTITION BY source ORDER BY started_at DESC) AS rn
+         FROM source_runs sr
+       ) t
+       JOIN sources s ON s.id = t.source_id
+       WHERE t.rn <= $1 AND s.city_id = $2
+       ORDER BY t.source ASC, t.started_at DESC`,
+      [perSource, cityId]
+    )
+  }
   return db.query<SourceRun>(
     `SELECT * FROM (
        SELECT sr.*, ROW_NUMBER() OVER (PARTITION BY source ORDER BY started_at DESC) AS rn
