@@ -60,7 +60,7 @@ export default async function EventDetailPage({
   const priceLabel = event.is_free ? 'Free' : event.price_min ? `From $${event.price_min}` : 'See tickets for pricing'
   const provider = getTicketProvider(event.ticket_url)
   const ticketCta = provider ? (event.is_free ? 'RSVP / Details' : provider.cta) : null
-  const jsonLd = eventJsonLd(event, citySlug)
+  const jsonLd = eventJsonLd(event, citySlug, city.name)
   // Cross-source provenance: the distinct other sources that also listed this
   // canonical event (dedup merges them into one record). Empty for single-source events.
   const otherSources = Array.from(new Set((event.sources ?? []).map(s => s.source)))
@@ -144,7 +144,7 @@ export default async function EventDetailPage({
 // schema.org Event JSON-LD so each listing is eligible for Google's event rich
 // results. The app scrapes this markup from sources but emitted none of its own
 // until now.
-function eventJsonLd(event: EnrichedEvent, citySlug: string): Record<string, unknown> {
+function eventJsonLd(event: EnrichedEvent, citySlug: string, cityName: string): Record<string, unknown> {
   const iso = (v: string | null) => {
     if (!v) return undefined
     const t = new Date(v)
@@ -169,8 +169,8 @@ function eventJsonLd(event: EnrichedEvent, citySlug: string): Record<string, unk
   if (event.venue_name || event.venue_address) {
     jsonLd.location = {
       '@type': 'Place',
-      name: event.venue_name ?? 'Austin, TX',
-      address: event.venue_address ?? 'Austin, TX',
+      name: event.venue_name ?? cityName,
+      address: event.venue_address ?? cityName,
     }
   }
 
