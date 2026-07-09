@@ -134,6 +134,12 @@ export default async function CityHomePage({
             </Suspense>
           </div>
           <Link
+            href={`${base}/submit`}
+            className="shrink-0 text-sm text-slate-600 hover:text-violet-700 font-medium hidden sm:inline"
+          >
+            Submit an event
+          </Link>
+          <Link
             href={`${base}/subscribe`}
             className="shrink-0 text-sm bg-violet-600 text-white px-3 py-1.5 rounded-md hover:bg-violet-700 transition-colors font-medium"
           >
