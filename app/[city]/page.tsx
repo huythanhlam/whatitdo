@@ -10,6 +10,7 @@ import { requireCity } from '@/lib/cities'
 import { resolveDateRange } from '@/lib/dateRanges'
 import { gridRangeIso, currentCentralMonth } from '@/lib/calendar'
 import { DateFilter } from '@/components/DateFilter'
+import { SEO_PAGES } from '@/lib/seoPages'
 import type { EnrichedEvent } from '@/lib/types'
 
 // Content changes about once a day (the ingest cron), so serve cached HTML and
@@ -161,6 +162,14 @@ export default async function CityHomePage({
             <Suspense fallback={<div className="h-9 w-32 bg-slate-100 rounded-lg animate-pulse" />}>
               <ViewToggle />
             </Suspense>
+          </div>
+
+          <div className="flex flex-wrap gap-3 mb-4 text-xs">
+            {SEO_PAGES.map(p => (
+              <Link key={p.slug} href={`${base}/${p.slug}`} className="text-violet-600 hover:underline">
+                {p.title}
+              </Link>
+            ))}
           </div>
 
           {/* Category filters on mobile (sidebar is hidden < md) */}
