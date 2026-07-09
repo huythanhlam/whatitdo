@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { getEvent as fetchEvent } from '@/lib/db'
+import { requireCity } from '@/lib/cities'
 import { getTicketProvider } from '@/lib/tickets'
 import { getBaseUrl } from '@/lib/site'
 import type { EnrichedEvent } from '@/lib/types'
@@ -15,7 +16,11 @@ export const revalidate = 900
 
 // Per-event <title>/description/OG so each listing is its own indexable page in
 // Google's event surfaces (the point of the SEO work).
-export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ city: string; id: string }>
+}): Promise<Metadata> {
   const { id } = await params
   const event = (await fetchEvent(id)) as unknown as EnrichedEvent | null
   if (!event) return { title: 'Event not found' }
@@ -24,26 +29,28 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
   })
   const where = event.venue_name ? ` at ${event.venue_name}` : ''
-  const description = (event.description?.trim() || `${event.title}${where} in Austin on ${date}.`).slice(0, 200)
+  const description = (event.description?.trim() || `${event.title}${where} on ${date}.`).slice(0, 200)
   const images = event.image_url ? [event.image_url] : undefined
 
   return {
     title: event.title,
     description,
-    alternates: { canonical: `/events/${event.id}` },
+    alternates: { canonical: `/${(await params).city}/events/${event.id}` },
     openGraph: { title: event.title, description, type: 'article', images },
     twitter: { card: 'summary_large_image', title: event.title, description, images },
   }
 }
 
-export default async function EventDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  // A missing event is a 404 (notFound → app/not-found.tsx); a DB failure throws
-  // and surfaces via the error boundary (app/error.tsx) instead of masquerading
-  // as "not found".
+export default async function EventDetailPage({
+  params,
+}: {
+  params: Promise<{ city: string; id: string }>
+}) {
+  const { city: citySlug, id } = await params
+  const city = await requireCity(citySlug)
   const event = (await fetchEvent(id)) as unknown as EnrichedEvent | null
 
-  if (!event) notFound()
+  if (!event || event.city_id !== city.id) notFound()
 
   const date = new Date(event.start_time)
   const dateStr = date.toLocaleDateString('en-US', {
@@ -53,7 +60,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
   const priceLabel = event.is_free ? 'Free' : event.price_min ? `From $${event.price_min}` : 'See tickets for pricing'
   const provider = getTicketProvider(event.ticket_url)
   const ticketCta = provider ? (event.is_free ? 'RSVP / Details' : provider.cta) : null
-  const jsonLd = eventJsonLd(event)
+  const jsonLd = eventJsonLd(event, citySlug)
   // Cross-source provenance: the distinct other sources that also listed this
   // canonical event (dedup merges them into one record). Empty for single-source events.
   const otherSources = Array.from(new Set((event.sources ?? []).map(s => s.source)))
@@ -64,7 +71,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <header className="border-b bg-white/95 sticky top-0 z-40">
         <div className="max-w-3xl mx-auto px-4 py-3">
-          <Link href="/" className="text-sm text-violet-600 hover:underline">← Back to events</Link>
+          <Link href={`/${citySlug}`} className="text-sm text-violet-600 hover:underline">← Back to events</Link>
         </div>
       </header>
 
@@ -123,7 +130,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
             </Button>
           )}
           <Button variant="outline" asChild>
-            <Link href="/subscribe">🔔 Get event alerts</Link>
+            <Link href={`/${citySlug}/subscribe`}>🔔 Get event alerts</Link>
           </Button>
         </div>
         {event.ticket_url && provider && provider.name !== 'venue site' && (
@@ -137,7 +144,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ id
 // schema.org Event JSON-LD so each listing is eligible for Google's event rich
 // results. The app scrapes this markup from sources but emitted none of its own
 // until now.
-function eventJsonLd(event: EnrichedEvent): Record<string, unknown> {
+function eventJsonLd(event: EnrichedEvent, citySlug: string): Record<string, unknown> {
   const iso = (v: string | null) => {
     if (!v) return undefined
     const t = new Date(v)
@@ -151,7 +158,7 @@ function eventJsonLd(event: EnrichedEvent): Record<string, unknown> {
     startDate: iso(event.start_time),
     eventStatus: 'https://schema.org/EventScheduled',
     eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
-    url: `${getBaseUrl()}/events/${event.id}`,
+    url: `${getBaseUrl()}/${citySlug}/events/${event.id}`,
   }
 
   const endDate = iso(event.end_time)

@@ -23,6 +23,7 @@ export type Event = {
   is_free: boolean
   price_min: number | null
   price_max: number | null
+  city_id: number
   created_at: string
   updated_at: string
   categories?: Category[]
