@@ -9,15 +9,22 @@ type HealthResponse = { healthy: boolean; stale: string[]; sources: HealthSource
 export default function AdminPage() {
   const { city } = useParams<{ city: string }>()
   const [token, setToken] = useState('')
-  // Lazy-initialized from localStorage (not an effect): this is a one-time
-  // read of a value that only changes via explicit user action (saveToken),
-  // so deriving it during render avoids the extra setState-in-effect render.
-  const [savedToken, setSavedToken] = useState<string | null>(() =>
-    typeof window === 'undefined' ? null : localStorage.getItem('admin_token')
-  )
+  const [savedToken, setSavedToken] = useState<string | null>(null)
   const [pending, setPending] = useState<PendingEvent[] | null>(null)
   const [health, setHealth] = useState<HealthResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const stored = localStorage.getItem('admin_token')
+    // Reading a client-only external source (localStorage) on mount; the
+    // server has no access to it, so this MUST happen post-hydration in an
+    // effect, not during render. A lazy useState initializer here causes a
+    // real server/client hydration mismatch instead (verified) — this is
+    // the correct pattern for this specific case, not the anti-pattern the
+    // rule is meant to catch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (stored) setSavedToken(stored)
+  }, [])
 
   // Fetch + setState happen inside the .then callbacks (a distinct closure
   // from `load` itself) so this synchronizes with the external API rather
