@@ -315,7 +315,7 @@ describe('Austin venue sources (migration 010)', () => {
   it('seeds a substantial set of enabled crawl/ical venue sources', async () => {
     const db = await getPgliteDb()
     const rows = await db.query<{ n: string }>(
-      `SELECT COUNT(*)::text AS n FROM sources WHERE notes = 'venue' AND enabled = true`
+      `SELECT COUNT(*)::text AS n FROM sources WHERE notes = 'venue' AND enabled = true AND city_id = 1`
     )
     expect(parseInt(rows[0].n, 10)).toBeGreaterThanOrEqual(40)
   })
