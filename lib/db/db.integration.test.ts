@@ -22,6 +22,7 @@ import {
   getSourceContentHash,
   setSourceContentHash,
   touchSourceSuccess,
+  getEnabledCities,
 } from './index'
 import { persistEvents } from '@/lib/persist'
 import type { RawEvent } from '@/lib/sources/types'
@@ -245,7 +246,7 @@ describe('sources table (migration 008)', () => {
   it('seeds Austin sources with valid kinds and parsers', async () => {
     const db = await getPgliteDb()
     const rows = await db.query<{ name: string; kind: string; parser: string; city_id: number; enabled: boolean }>(
-      `SELECT name, kind, parser, city_id, enabled FROM sources ORDER BY name`
+      `SELECT name, kind, parser, city_id, enabled FROM sources WHERE city_id = 1 ORDER BY name`
     )
     // At least the structured + feed sources are seeded.
     expect(rows.length).toBeGreaterThanOrEqual(15)
@@ -348,6 +349,31 @@ describe('city scoping migration (011)', () => {
     expect(a).toBeTruthy()
     expect(b).toBeTruthy()
     expect(a).not.toBe(b)
+  })
+})
+
+describe('Houston seed (migration 012)', () => {
+  it('seeds Houston enabled with T1/T2/T3 source coverage', async () => {
+    const db = await getPgliteDb()
+    const houston = (await db.query<{ id: number; enabled: boolean }>(
+      `SELECT id, enabled FROM cities WHERE slug = 'houston'`
+    ))[0]
+    expect(houston).toBeTruthy()
+    expect(houston.enabled).toBe(true)
+
+    const rows = await db.query<{ name: string; kind: string; parser: string }>(
+      `SELECT name, kind, parser FROM sources WHERE city_id = $1`, [houston.id]
+    )
+    expect(rows.length).toBeGreaterThanOrEqual(25)
+    const names = new Set(rows.map(r => r.name))
+    expect(names.has('ticketmaster:houston')).toBe(true)
+    expect(names.has('seatgeek:houston')).toBe(true)
+    expect(rows.filter(r => r.parser === 'crawl').length).toBeGreaterThanOrEqual(20)
+  })
+
+  it('is returned by getEnabledCities alongside Austin', async () => {
+    const cities = await getEnabledCities()
+    expect(cities.map(c => c.slug).sort()).toEqual(['austin', 'houston'])
   })
 })
 
