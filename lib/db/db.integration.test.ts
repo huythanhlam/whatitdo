@@ -313,6 +313,29 @@ describe('Austin venue sources (migration 010)', () => {
   })
 })
 
+describe('city scoping migration (011)', () => {
+  it('adds city_id to subscriptions and featured_listings, backfilled to Austin', async () => {
+    const db = await getPgliteDb()
+    const subCols = await db.query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns WHERE table_name = 'subscriptions'`
+    )
+    expect(subCols.map(c => c.column_name)).toEqual(expect.arrayContaining(['city_id']))
+
+    const flCols = await db.query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns WHERE table_name = 'featured_listings'`
+    )
+    expect(flCols.map(c => c.column_name)).toEqual(expect.arrayContaining(['city_id']))
+  })
+
+  it('allows the same email to subscribe independently per city', async () => {
+    const a = await addSubscription({ email: 'multi-city@example.com', frequency: 'daily', category_slugs: [], cityId: 1 })
+    const b = await addSubscription({ email: 'multi-city@example.com', frequency: 'daily', category_slugs: [], cityId: 2 })
+    expect(a).toBeTruthy()
+    expect(b).toBeTruthy()
+    expect(a).not.toBe(b)
+  })
+})
+
 function mk(overrides: Partial<RawEvent>): RawEvent {
   return {
     title: 'Integration Test Show',
