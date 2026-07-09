@@ -1,6 +1,6 @@
 import { Resend } from 'resend'
 import type { Event, Category } from '@/lib/types'
-import { listSubscriptions, getEventsBetween } from '@/lib/db'
+import { listSubscriptions, getEventsBetween, getCityById } from '@/lib/db'
 import { escapeHtml, safeUrl } from '@/lib/html'
 import { getBaseUrl } from '@/lib/site'
 
@@ -8,13 +8,13 @@ const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KE
 
 // Verified sender for production; falls back to Resend's shared sandbox address
 // (which only delivers to the account owner) when EMAIL_FROM is unset.
-export const EMAIL_FROM = process.env.EMAIL_FROM ?? 'What It Do Austin <onboarding@resend.dev>'
+export const EMAIL_FROM = process.env.EMAIL_FROM ?? 'What It Do <onboarding@resend.dev>'
 
 export type DigestFrequency = 'daily' | 'weekly'
 
 type EventWithCats = Event & { categories?: Category[] }
 
-function buildDigestHtml(events: EventWithCats[], unsubscribeUrl: string, dateLabel: string): string {
+function buildDigestHtml(events: EventWithCats[], unsubscribeUrl: string, dateLabel: string, cityName: string): string {
   const eventHtml = events.slice(0, 12).map(e => {
     const date = new Date(e.start_time).toLocaleDateString('en-US', {
       weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
@@ -38,8 +38,8 @@ function buildDigestHtml(events: EventWithCats[], unsubscribeUrl: string, dateLa
 
   return `
     <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
-      <h1 style="color:#7c3aed;margin-bottom:4px">What It Do Austin</h1>
-      <p style="color:#666;margin-bottom:8px">Austin events — ${escapeHtml(dateLabel)}</p>
+      <h1 style="color:#7c3aed;margin-bottom:4px">What It Do ${escapeHtml(cityName)}</h1>
+      <p style="color:#666;margin-bottom:8px">${escapeHtml(cityName)} events — ${escapeHtml(dateLabel)}</p>
       <hr style="border:none;border-top:1px solid #eee;margin-bottom:24px">
       ${eventHtml}
       ${events.length === 0 ? '<p style="color:#888;text-align:center">No events found for your filters.</p>' : ''}
@@ -51,25 +51,27 @@ function buildDigestHtml(events: EventWithCats[], unsubscribeUrl: string, dateLa
   `
 }
 
-export async function sendDigests(frequency: DigestFrequency = 'daily') {
-  const baseUrl = getBaseUrl()
+export async function sendDigests(frequency: DigestFrequency, cityId: number) {
+  const city = await getCityById(cityId)
+  if (!city) return { sent: 0, frequency, cityId }
 
-  const subs = await listSubscriptions(frequency)
-  if (!subs.length) return { sent: 0, frequency }
+  const baseUrl = getBaseUrl()
+  const subs = await listSubscriptions(frequency, cityId)
+  if (!subs.length) return { sent: 0, frequency, cityId }
 
   const now = new Date()
   const windowDays = frequency === 'weekly' ? 7 : 1
   const end = new Date(now.getTime() + windowDays * 86400000)
 
-  const rawEvents = await getEventsBetween(now.toISOString(), end.toISOString())
+  const rawEvents = await getEventsBetween(cityId, now.toISOString(), end.toISOString())
   const events: EventWithCats[] = rawEvents.map(e => e as unknown as EventWithCats)
 
   const dateLabel = frequency === 'weekly'
     ? `week of ${now.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}`
     : now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
   const subject = frequency === 'weekly'
-    ? `Austin events this week — ${dateLabel}`
-    : `Austin events today — ${dateLabel}`
+    ? `${city.name} events this week — ${dateLabel}`
+    : `${city.name} events today — ${dateLabel}`
 
   let sent = 0
 
@@ -87,7 +89,7 @@ export async function sendDigests(frequency: DigestFrequency = 'daily') {
         from: EMAIL_FROM,
         to: sub.email,
         subject,
-        html: buildDigestHtml(filtered, unsubscribeUrl, dateLabel),
+        html: buildDigestHtml(filtered, unsubscribeUrl, dateLabel, city.name),
         headers: {
           'List-Unsubscribe': `<${unsubscribeUrl}>`,
           'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
@@ -99,5 +101,5 @@ export async function sendDigests(frequency: DigestFrequency = 'daily') {
     }
   }
 
-  return { sent, frequency }
+  return { sent, frequency, cityId }
 }

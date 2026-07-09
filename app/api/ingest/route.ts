@@ -2,29 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { PARSERS } from '@/lib/sources/registry'
 import type { SourceRow, SourceContext } from '@/lib/sources/types'
 import { persistEvents } from '@/lib/persist'
-import { isLocal, getEnabledSources, startSourceRun, finishSourceRun, touchSourceSuccess } from '@/lib/db'
+import { isLocal, getEnabledCities, getEnabledSources, startSourceRun, finishSourceRun, touchSourceSuccess, type City } from '@/lib/db'
 import { withGeminiMeter } from '@/lib/gemini'
 import { requireCronAuth } from '@/lib/auth'
 
 export const maxDuration = 300
 
-// Austin until Phase 3 wires multi-city through the orchestrator.
-const CITY_ID = 1
-
-// Minimal compile-fix for SourceContext.city's new object shape (Task 3 of the
-// Phase 2/3 plan) — still hardcoded to Austin, matching prior behavior. Wiring
-// this to the actual per-city `cities` row via CITY_ID/getCityById is Task 6's
-// job, not this one; that's the still-deferred multi-city orchestrator wiring.
-const AUSTIN_CITY = { id: CITY_ID, slug: 'austin', name: 'Austin', state: 'TX' }
-
-function contextFor(source: SourceRow): SourceContext {
+function contextFor(source: SourceRow, city: City): SourceContext {
   return {
-    city: AUSTIN_CITY,
+    city: { id: city.id, slug: city.slug, name: city.name, state: city.state },
     since: new Date(),
     logger: {
-      log: (...a) => console.log(`[${source.name}]`, ...a),
-      warn: (...a) => console.warn(`[${source.name}]`, ...a),
-      error: (...a) => console.error(`[${source.name}]`, ...a),
+      log: (...a) => console.log(`[${city.slug}/${source.name}]`, ...a),
+      warn: (...a) => console.warn(`[${city.slug}/${source.name}]`, ...a),
+      error: (...a) => console.error(`[${city.slug}/${source.name}]`, ...a),
     },
   }
 }
@@ -32,7 +23,7 @@ function contextFor(source: SourceRow): SourceContext {
 // Run one configured source end to end, wrapped in a source_runs record linked to
 // its sources row. A missing parser or unavailable mechanism (no API key) is a
 // visible `skipped`, never a silent empty source.
-async function runSource(source: SourceRow): Promise<{ upserted: number; found: number; rejected: number }> {
+async function runSource(source: SourceRow, city: City): Promise<{ upserted: number; found: number; rejected: number }> {
   const parser = PARSERS[source.parser]
   if (!parser || !parser.available()) {
     const id = await startSourceRun(source.name, source.id)
@@ -49,9 +40,9 @@ async function runSource(source: SourceRow): Promise<{ upserted: number; found: 
     // persist-time tagging requests are attributed to it, even though sources
     // run concurrently.
     const { result, meter } = await withGeminiMeter(async () => {
-      const { events, skipped } = await parser.fetch(source, contextFor(source))
+      const { events, skipped } = await parser.fetch(source, contextFor(source, city))
       if (skipped) return { skipped: true as const, persist: null }
-      return { skipped: false as const, persist: await persistEvents(events) }
+      return { skipped: false as const, persist: await persistEvents(events, { cityId: city.id, status: 'approved' }) }
     })
 
     if (result.skipped) {
@@ -78,36 +69,40 @@ async function runSource(source: SourceRow): Promise<{ upserted: number; found: 
     if (!budgetBlocked) await touchSourceSuccess(source.id)
     return { upserted: inserted, found: total, rejected }
   } catch (e) {
-    console.error(`Source ${source.name} failed:`, e)
+    console.error(`Source ${source.name} (${city.slug}) failed:`, e)
     await finishSourceRun(id, { status: 'error', error: (e as Error).message?.slice(0, 500) ?? 'unknown' })
     return { upserted: 0, found: 0, rejected: 0 }
   }
 }
 
 async function runIngest() {
-  // Ingestion is driven entirely by the `sources` table (Phase 2B): enabled rows
-  // for the city, each dispatched to its parser mechanism. Adding coverage is an
-  // INSERT, not a code change. Sources run concurrently; each owns its run record.
-  const sources = await getEnabledSources(CITY_ID)
-  const results = await Promise.all(
-    sources.map(async source => ({ name: source.name, ...(await runSource(source)) }))
+  // Ingestion is driven entirely by the `sources` table (Phase 2B), looped over
+  // every enabled city (Phase 3): enabled rows for each city, each dispatched to
+  // its parser mechanism. Adding coverage is an INSERT, not a code change.
+  const cities = await getEnabledCities()
+
+  const perCity = await Promise.all(cities.map(async city => {
+    const sources = await getEnabledSources(city.id)
+    const results = await Promise.all(
+      sources.map(async source => ({ name: source.name, ...(await runSource(source, city)) }))
+    )
+    const bySource: Record<string, number> = {}
+    let inserted = 0, found = 0, rejected = 0
+    for (const r of results) {
+      bySource[r.name] = r.upserted
+      inserted += r.upserted
+      found += r.found
+      rejected += r.rejected
+    }
+    return { city: city.slug, inserted, found, rejected, bySource }
+  }))
+
+  const totals = perCity.reduce(
+    (acc, c) => ({ inserted: acc.inserted + c.inserted, rejected: acc.rejected + c.rejected, total: acc.total + c.found }),
+    { inserted: 0, rejected: 0, total: 0 }
   )
 
-  const bySource: Record<string, number> = {}
-  let inserted = 0
-  let found = 0
-  let rejected = 0
-  for (const r of results) {
-    bySource[r.name] = r.upserted
-    inserted += r.upserted
-    found += r.found
-    rejected += r.rejected
-  }
-
-  return NextResponse.json({
-    inserted, rejected, total: found,
-    bySource, mode: isLocal() ? 'local' : 'supabase',
-  })
+  return NextResponse.json({ ...totals, byCity: perCity, mode: isLocal() ? 'local' : 'supabase' })
 }
 
 export async function POST(req: NextRequest) {

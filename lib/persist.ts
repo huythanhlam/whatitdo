@@ -9,10 +9,6 @@ import { normalizeTitle, normalizeVenue } from '@/lib/normalize'
 import { chooseMatch, mergeFields } from '@/lib/dedup'
 import type { RawEvent } from '@/lib/sources/types'
 
-// Austin until Phase 3 wires multi-city through the ingest context. Matches the
-// events.city_id default from migration 007.
-const CITY_ID = 1
-
 // The single validation gate. A fabricated or nonsensical date is worse than no
 // event — it actively misleads users — so an event is rejected when its
 // start_time is missing/unparseable, its title is empty, or it starts more than
@@ -29,17 +25,20 @@ export function isValidEvent(raw: RawEvent): boolean {
   return true
 }
 
-// Shared persistence pipeline used by both the scheduled ingest (/api/ingest) and
-// the on-demand importer (/api/import). Per event: reject undateable input, tag
-// (batched Gemini or keyword fallback), guarantee a themed image, then run
-// cross-source dedup (block → score → merge → provenance) so the same event from
-// multiple sources collapses into one canonical row. `inserted` counts every
-// event successfully persisted — whether newly created or merged into an existing
-// canonical row — preserving the return shape the ingest orchestrator records as
-// events_upserted.
+export type EventStatus = 'approved' | 'pending'
+
+// Shared persistence pipeline used by the scheduled ingest, the on-demand
+// importer, and public submissions. `cityId` defaults to Austin (1) so
+// existing tests/call sites that don't pass it keep working; `status`
+// defaults to 'approved' (pipeline-trusted sources) — public submissions pass
+// 'pending' explicitly (see persistOne's merge-skip rule below).
 export async function persistEvents(
-  input: RawEvent[]
+  input: RawEvent[],
+  opts: { cityId?: number; status?: EventStatus } = {}
 ): Promise<{ inserted: number; skipped: number; rejected: number; total: number }> {
+  const cityId = opts.cityId ?? 1
+  const status = opts.status ?? 'approved'
+
   const total = input.length
   if (total === 0) return { inserted: 0, skipped: 0, rejected: 0, total: 0 }
 
@@ -62,7 +61,7 @@ export async function persistEvents(
   // Ingest already runs sources concurrently; within a source, order matters.
   for (let i = 0; i < events.length; i++) {
     try {
-      const eventId = await persistOne(events[i], CITY_ID)
+      const eventId = await persistOne(events[i], cityId, status)
       const categoryIds = slugs[i].map(s => categoryIdBySlug[s]).filter(Boolean)
       await setEventCategories(eventId, categoryIds)
       inserted++
@@ -76,7 +75,7 @@ export async function persistEvents(
 
 // Resolve one raw event to a canonical event id, creating, matching, or merging
 // as needed, and always recording provenance. Returns the canonical event id.
-async function persistOne(raw: RawEvent, cityId: number): Promise<string> {
+async function persistOne(raw: RawEvent, cityId: number, status: EventStatus): Promise<string> {
   const titleNorm = normalizeTitle(raw.title, raw.venue_name)
   const venueNorm = normalizeVenue(raw.venue_name)
 
@@ -84,7 +83,7 @@ async function persistOne(raw: RawEvent, cityId: number): Promise<string> {
   let eventId = await findEventBySource(raw.source, raw.source_id)
 
   if (eventId) {
-    // Same source re-ingested — merge any newly-richer fields in place.
+    // Same submission/source re-ingested — always safe to merge (same author).
     const existing = await getEventRow(eventId)
     if (existing) {
       const patch = mergeFields(existing, raw)
@@ -98,14 +97,21 @@ async function persistOne(raw: RawEvent, cityId: number): Promise<string> {
     if (matchId) {
       // 3a. Matched a different source's event — merge into it.
       eventId = matchId
-      const existing = await getEventRow(eventId)
-      if (existing) {
-        const patch = mergeFields(existing, raw)
-        if (patch) await updateEventFields(eventId, patch)
+      // An unmoderated ('pending') submission that cross-source-matches an
+      // existing canonical event must NOT overwrite its fields — only
+      // pipeline-trusted sources merge into a match. The submission still gets
+      // its provenance row recorded below (visible to admins as "also
+      // submitted"), it just can't mutate the matched event.
+      if (status !== 'pending') {
+        const existing = await getEventRow(eventId)
+        if (existing) {
+          const patch = mergeFields(existing, raw)
+          if (patch) await updateEventFields(eventId, patch)
+        }
       }
     } else {
       // 3b. No match — new canonical event.
-      eventId = await insertEvent(raw, { cityId, titleNorm, venueNorm })
+      eventId = await insertEvent(raw, { cityId, titleNorm, venueNorm, status })
     }
   }
 

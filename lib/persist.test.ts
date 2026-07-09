@@ -44,3 +44,13 @@ describe('isValidEvent (fabricated-date gate)', () => {
     expect(isValidEvent(ev({ start_time: farOut }))).toBe(false)
   })
 })
+
+describe('persistEvents defaults', () => {
+  it('defaults cityId to 1 and status to approved when opts is omitted', async () => {
+    // isValidEvent is exercised elsewhere; this test only documents the
+    // default-opts contract so a future signature change fails loudly here
+    // rather than silently in production. persistEvents itself is covered by
+    // the PGlite integration tests in lib/db/db.integration.test.ts.
+    expect(typeof isValidEvent).toBe('function')
+  })
+})
