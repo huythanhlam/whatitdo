@@ -21,7 +21,9 @@ export async function generateStaticParams() {
   return cities.map(c => ({ city: c.slug }))
 }
 
-function serializeSitemap(entries: MetadataRoute.Sitemap): string {
+// Supports url/lastModified/changeFrequency/priority only — alternates/images/videos
+// from MetadataRoute.Sitemap are NOT implemented and will silently be dropped if used.
+export function serializeSitemap(entries: MetadataRoute.Sitemap): string {
   let xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
   xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
   for (const entry of entries) {
