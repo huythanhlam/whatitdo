@@ -1,14 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { resolvePage, extractAndPersist, InputError } from '@/lib/submissions'
 import { getCityBySlug } from '@/lib/db'
+import { checkRateLimit, clientIp } from '@/lib/rateLimit'
 
 export const maxDuration = 120
+
+// 5 submissions/hour/IP — generous for a real person submitting a few events,
+// low enough to blunt a flood against the shared Gemini daily budget
+// (lib/gemini.ts), which the scheduled ingest cron also depends on.
+const SUBMIT_MAX = 5
+const SUBMIT_WINDOW_MS = 60 * 60 * 1000
 
 // Public, UNAUTHENTICATED submission intake (the point of the feature — no
 // accounts, anyone can submit): url or pasted text → extracted → persisted as
 // `pending` (never auto-published) for review at /[city]/admin. SSRF-guarded
 // exactly like /api/import via lib/submissions.ts's shared resolvePage().
 export async function POST(req: NextRequest) {
+  if (!checkRateLimit(`submissions:${clientIp(req)}`, SUBMIT_MAX, SUBMIT_WINDOW_MS)) {
+    return NextResponse.json({ error: 'Too many submissions from this address — please try again later.' }, { status: 429 })
+  }
+
   let body: { url?: unknown; text?: unknown; city?: unknown }
   try {
     body = await req.json()
