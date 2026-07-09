@@ -11,9 +11,15 @@ export const maxDuration = 300
 // Austin until Phase 3 wires multi-city through the orchestrator.
 const CITY_ID = 1
 
+// Minimal compile-fix for SourceContext.city's new object shape (Task 3 of the
+// Phase 2/3 plan) — still hardcoded to Austin, matching prior behavior. Wiring
+// this to the actual per-city `cities` row via CITY_ID/getCityById is Task 6's
+// job, not this one; that's the still-deferred multi-city orchestrator wiring.
+const AUSTIN_CITY = { id: CITY_ID, slug: 'austin', name: 'Austin', state: 'TX' }
+
 function contextFor(source: SourceRow): SourceContext {
   return {
-    city: 'austin',
+    city: AUSTIN_CITY,
     since: new Date(),
     logger: {
       log: (...a) => console.log(`[${source.name}]`, ...a),

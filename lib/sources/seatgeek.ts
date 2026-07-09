@@ -9,7 +9,7 @@ function performerImage(performers: SgPerformer[] | undefined): string | null {
   return p?.image ?? p?.images?.huge ?? p?.images?.large ?? null
 }
 
-export async function fetchSeatGeekEvents(): Promise<RawEvent[]> {
+export async function fetchSeatGeekEvents(city: { name: string }): Promise<RawEvent[]> {
   const clientId = process.env.SEATGEEK_CLIENT_ID
   if (!clientId) {
     console.warn('SEATGEEK_CLIENT_ID not set — skipping SeatGeek')
@@ -20,7 +20,7 @@ export async function fetchSeatGeekEvents(): Promise<RawEvent[]> {
 
   for (let page = 1; page <= 3; page++) {
     const url = new URL('https://api.seatgeek.com/2/events')
-    url.searchParams.set('venue.city', 'Austin')
+    url.searchParams.set('venue.city', city.name)
     url.searchParams.set('client_id', clientId)
     url.searchParams.set('per_page', '100')
     url.searchParams.set('page', String(page))

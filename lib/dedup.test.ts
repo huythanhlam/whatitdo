@@ -11,6 +11,13 @@ describe('sourceTrust', () => {
   it('puts rss (newspapers) at the same tier as crawl', () => {
     expect(sourceTrust('newspapers')).toBe(sourceTrust('crawl')) // rss tier == crawl tier == 1
   })
+  it('ranks a city-suffixed structured source the same as its base name', () => {
+    expect(sourceTrust('ticketmaster:houston')).toBe(sourceTrust('ticketmaster'))
+    expect(sourceTrust('seatgeek:houston')).toBe(sourceTrust('seatgeek'))
+  })
+  it('puts public submissions at the same (lowest) trust tier as crawl', () => {
+    expect(sourceTrust('submission')).toBe(sourceTrust('crawl'))
+  })
 })
 
 describe('chooseMatch', () => {

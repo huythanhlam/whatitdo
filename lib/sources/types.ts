@@ -14,12 +14,11 @@ export type RawEvent = {
   price_max: number | null
 }
 
-// Context handed to every source at fetch time. `city`/`since` are the seams
-// for the coming multi-city + incremental work (PRODUCT-SPEC §3); today's
-// parsers ignore them, but the shape is fixed so wiring them through later
-// doesn't change the interface. `logger` is a namespaced console for the run.
+// `city` carries enough of the `cities` row for structured APIs (Ticketmaster,
+// SeatGeek) to query the right geography — previously a bare 'austin' string
+// that nothing actually read.
 export type SourceContext = {
-  city: string
+  city: { id: number; slug: string; name: string; state: string }
   since: Date
   logger: Pick<Console, 'log' | 'warn' | 'error'>
 }

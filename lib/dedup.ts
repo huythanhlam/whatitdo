@@ -5,6 +5,10 @@ import type { RawEvent, SourceKind } from './sources/types'
 // jsonld > rss/crawl. Keyed by source *name*; kinds mirror the registry. Kept as a
 // small static map so the pure merge stays dependency-light and testable. Phase
 // 2B, which makes sources DB-driven, can replace this with a kind lookup.
+// Multi-city structured sources need their own literal key here (source *names*
+// are unique per row, e.g. 'ticketmaster:houston') until sourceTrust is rebuilt
+// on top of sources.kind directly — see the plan's scoping note on the
+// pre-existing crawl:*/newspaper:* instance-name gap, which this does not fix.
 const KIND_BY_SOURCE: Record<string, SourceKind> = {
   ticketmaster: 'api',
   seatgeek: 'api',
@@ -15,6 +19,9 @@ const KIND_BY_SOURCE: Record<string, SourceKind> = {
   social: 'crawl',
   crawl: 'crawl',
   seed: 'seed',
+  'ticketmaster:houston': 'api',
+  'seatgeek:houston': 'api',
+  submission: 'crawl',
 }
 
 // rss sits at the crawl tier: newspaper RSS is Gemini-extracted, not structured.

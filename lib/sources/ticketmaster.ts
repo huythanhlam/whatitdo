@@ -11,7 +11,7 @@ function bestImage(images: TmImage[] | undefined): string | null {
   return pool.reduce((best, i) => (i.width ?? 0) > (best.width ?? 0) ? i : best).url ?? null
 }
 
-export async function fetchTicketmasterEvents(): Promise<RawEvent[]> {
+export async function fetchTicketmasterEvents(city: { name: string; state: string }): Promise<RawEvent[]> {
   const apiKey = process.env.TICKETMASTER_API_KEY
   if (!apiKey) {
     console.warn('TICKETMASTER_API_KEY not set — skipping Ticketmaster')
@@ -23,8 +23,8 @@ export async function fetchTicketmasterEvents(): Promise<RawEvent[]> {
   for (let page = 0; page < 3; page++) {
     const url = new URL('https://app.ticketmaster.com/discovery/v2/events.json')
     url.searchParams.set('apikey', apiKey)
-    url.searchParams.set('city', 'Austin')
-    url.searchParams.set('stateCode', 'TX')
+    url.searchParams.set('city', city.name)
+    url.searchParams.set('stateCode', city.state)
     url.searchParams.set('size', '100')
     url.searchParams.set('sort', 'date,asc')
     url.searchParams.set('page', String(page))
@@ -58,7 +58,7 @@ export async function fetchTicketmasterEvents(): Promise<RawEvent[]> {
         start_time: new Date(start).toISOString(),
         end_time: null,
         venue_name: venue?.name ?? null,
-        venue_address: venue ? `${venue.address?.line1 ?? ''}, ${venue.city?.name ?? 'Austin'}`.trim() : null,
+        venue_address: venue ? `${venue.address?.line1 ?? ''}, ${venue.city?.name ?? city.name}`.trim() : null,
         image_url: bestImage(ev.images as TmImage[] | undefined),
         ticket_url: (ev.url as string) ?? null,
         source: 'ticketmaster',
