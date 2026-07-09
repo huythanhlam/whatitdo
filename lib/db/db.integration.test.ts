@@ -23,6 +23,9 @@ import {
   setSourceContentHash,
   touchSourceSuccess,
   getEnabledCities,
+  listPendingEvents,
+  approveEvent,
+  rejectEvent,
 } from './index'
 import { persistEvents } from '@/lib/persist'
 import type { RawEvent } from '@/lib/sources/types'
@@ -374,6 +377,49 @@ describe('Houston seed (migration 012)', () => {
   it('is returned by getEnabledCities alongside Austin', async () => {
     const cities = await getEnabledCities()
     expect(cities.map(c => c.slug).sort()).toEqual(['austin', 'houston'])
+  })
+})
+
+describe('event moderation (migration 013)', () => {
+  it('defaults new events to approved and excludes pending/rejected from listEvents', async () => {
+    const soon = new Date(Date.now() + 10 * 24 * 3600 * 1000).toISOString()
+    const pendingId = await insertEvent(
+      mk({ source: 'submission', source_id: 'mod-pending-1', title: 'Pending Test Event', start_time: soon }),
+      { cityId: 1, titleNorm: 'pending test event', venueNorm: null, status: 'pending' }
+    )
+    const approvedId = await insertEvent(
+      mk({ source: 'submission', source_id: 'mod-approved-1', title: 'Approved Test Event', start_time: soon }),
+      { cityId: 1, titleNorm: 'approved test event', venueNorm: null }
+    )
+
+    const visible = await listEvents({ cityId: 1, q: 'Test Event', limit: 10, offset: 0 })
+    expect(visible.some(e => e.id === pendingId)).toBe(false)
+    expect(visible.some(e => e.id === approvedId)).toBe(true)
+
+    expect(await getEvent(pendingId)).toBeNull()
+    expect((await getEvent(approvedId))?.id).toBe(approvedId)
+  })
+
+  it('lists, approves, and rejects pending events', async () => {
+    const soon = new Date(Date.now() + 11 * 24 * 3600 * 1000).toISOString()
+    const id = await insertEvent(
+      mk({ source: 'submission', source_id: 'mod-flow-1', title: 'Moderation Flow Event', start_time: soon }),
+      { cityId: 1, titleNorm: 'moderation flow event', venueNorm: null, status: 'pending' }
+    )
+
+    const pending = await listPendingEvents(1)
+    expect(pending.some(p => p.id === id)).toBe(true)
+
+    await approveEvent(id)
+    expect((await getEvent(id))?.id).toBe(id)
+
+    const id2 = await insertEvent(
+      mk({ source: 'submission', source_id: 'mod-flow-2', title: 'Moderation Flow Event 2', start_time: soon }),
+      { cityId: 1, titleNorm: 'moderation flow event 2', venueNorm: null, status: 'pending' }
+    )
+    await rejectEvent(id2)
+    expect(await getEvent(id2)).toBeNull()
+    expect((await listPendingEvents(1)).some(p => p.id === id2)).toBe(false)
   })
 })
 

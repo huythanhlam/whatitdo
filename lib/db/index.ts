@@ -230,18 +230,19 @@ export async function findDedupCandidates(opts: {
 // Insert a brand-new canonical event. Caller supplies the normalized keys.
 export async function insertEvent(
   raw: RawEvent,
-  keys: { cityId: number; titleNorm: string; venueNorm: string | null }
+  keys: { cityId: number; titleNorm: string; venueNorm: string | null; status?: 'approved' | 'pending' | 'rejected' }
 ): Promise<string> {
   const db = await getDb()
   const rows = await db.query<{ id: string }>(
     `INSERT INTO events (title, description, start_time, end_time, venue_name,
        venue_address, image_url, ticket_url, source, source_id, is_free,
-       price_min, price_max, city_id, title_norm, venue_norm, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16, NOW())
+       price_min, price_max, city_id, title_norm, venue_norm, status, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, NOW())
      RETURNING id`,
     [raw.title, raw.description, raw.start_time, raw.end_time, raw.venue_name,
      raw.venue_address, raw.image_url, raw.ticket_url, raw.source, raw.source_id,
-     raw.is_free, raw.price_min, raw.price_max, keys.cityId, keys.titleNorm, keys.venueNorm]
+     raw.is_free, raw.price_min, raw.price_max, keys.cityId, keys.titleNorm, keys.venueNorm,
+     keys.status ?? 'approved']
   )
   return rows[0].id
 }
@@ -512,6 +513,37 @@ export async function recentSourceRuns(perSource: number): Promise<SourceRun[]> 
      ORDER BY source ASC, started_at DESC`,
     [perSource]
   )
+}
+
+// ---------------------------------------------------------------------------
+// Moderation (Phase 2: public submissions land as 'pending')
+// ---------------------------------------------------------------------------
+export type PendingEvent = {
+  id: string
+  title: string
+  venue_name: string | null
+  start_time: string
+  source: string
+  created_at: string
+}
+
+export async function listPendingEvents(cityId: number): Promise<PendingEvent[]> {
+  const db = await getDb()
+  return db.query<PendingEvent>(
+    `SELECT id, title, venue_name, start_time, source, created_at FROM events
+     WHERE city_id = $1 AND status = 'pending' ORDER BY created_at DESC`,
+    [cityId]
+  )
+}
+
+export async function approveEvent(id: string): Promise<void> {
+  const db = await getDb()
+  await db.query(`UPDATE events SET status = 'approved', updated_at = NOW() WHERE id = $1`, [id])
+}
+
+export async function rejectEvent(id: string): Promise<void> {
+  const db = await getDb()
+  await db.query(`UPDATE events SET status = 'rejected', updated_at = NOW() WHERE id = $1`, [id])
 }
 
 // ---------------------------------------------------------------------------
