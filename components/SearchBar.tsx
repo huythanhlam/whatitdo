@@ -1,10 +1,11 @@
 'use client'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { useTransition, useRef } from 'react'
 import { Input } from '@/components/ui/input'
 
 export function SearchBar() {
   const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -20,7 +21,7 @@ export function SearchBar() {
         params.delete('q')
       }
       params.delete('page')
-      startTransition(() => router.push(`/?${params.toString()}`))
+      startTransition(() => router.push(`${pathname}?${params.toString()}`))
     }, 300)
   }
 
@@ -30,7 +31,7 @@ export function SearchBar() {
       <Input
         defaultValue={searchParams.get('q') ?? ''}
         onChange={handleChange}
-        placeholder="Search Austin events, venues…"
+        placeholder="Search events, venues…"
         className="pl-8"
       />
       {isPending && (

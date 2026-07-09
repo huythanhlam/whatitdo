@@ -8,11 +8,12 @@ import type { EnrichedEvent } from '@/lib/types'
 
 type Props = {
   event: EnrichedEvent
+  basePath: string
   featured?: boolean
   featuredLabel?: string
 }
 
-export function EventCard({ event, featured = false, featuredLabel }: Props) {
+export function EventCard({ event, basePath, featured = false, featuredLabel }: Props) {
   const date = new Date(event.start_time)
   const dateStr = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
   const timeStr = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
@@ -35,7 +36,7 @@ export function EventCard({ event, featured = false, featuredLabel }: Props) {
     <Card className={`relative overflow-hidden h-full flex flex-col transition-all hover:shadow-lg hover:-translate-y-0.5 ${featured ? 'ring-2 ring-violet-400 shadow-violet-100' : ''}`}>
       {featured && <FeaturedBadge label={featuredLabel} />}
 
-      <Link href={`/events/${event.id}`} className="block group flex-1">
+      <Link href={`${basePath}/events/${event.id}`} className="block group flex-1">
         {event.image_url ? (
           <div className="relative h-44 overflow-hidden bg-slate-100">
             <Image

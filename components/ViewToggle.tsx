@@ -1,11 +1,12 @@
 'use client'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { LayoutGrid, CalendarDays } from 'lucide-react'
 
 // Switches the home page between the card grid and the calendar view via the
 // `view` URL param, preserving all other active filters.
 export function ViewToggle() {
   const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const view = searchParams.get('view') === 'calendar' ? 'calendar' : 'grid'
 
@@ -15,7 +16,7 @@ export function ViewToggle() {
     if (next === 'calendar') params.set('view', 'calendar')
     else params.delete('view')
     params.delete('page')
-    router.push(`/?${params.toString()}`)
+    router.push(`${pathname}?${params.toString()}`)
   }
 
   const btn = (active: boolean) =>

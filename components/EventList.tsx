@@ -7,18 +7,21 @@ const PAGE_SIZE = 24
 
 // Renders the initial (server-fetched) page, then appends further pages from
 // /api/events on demand, preserving the active filters via `query`.
-export function EventList({ initialEvents, query, total }: { initialEvents: EnrichedEvent[]; query: string; total: number }) {
+export function EventList({
+  initialEvents, query, total, basePath,
+}: { initialEvents: EnrichedEvent[]; query: string; total: number; basePath: string }) {
   const [events, setEvents] = useState<EnrichedEvent[]>(initialEvents)
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState(initialEvents.length >= total || initialEvents.length < PAGE_SIZE)
+  const citySlug = basePath.replace(/^\//, '')
 
   async function loadMore() {
     setLoading(true)
     try {
       const next = page + 1
       const sep = query ? '&' : ''
-      const res = await fetch(`/api/events?${query}${sep}page=${next}`, { cache: 'no-store' })
+      const res = await fetch(`/api/events?${query}${sep}page=${next}&city=${citySlug}`, { cache: 'no-store' })
       const data = await res.json()
       const more: EnrichedEvent[] = data.events ?? []
       setEvents(prev => [...prev, ...more])
@@ -37,7 +40,7 @@ export function EventList({ initialEvents, query, total }: { initialEvents: Enri
         Showing <span className="font-medium text-slate-700">{events.length}</span> of{' '}
         <span className="font-medium text-slate-700">{total}</span> {total === 1 ? 'event' : 'events'}
       </p>
-      <EventGrid events={events} />
+      <EventGrid events={events} basePath={basePath} />
       {!done && events.length > 0 && (
         <div className="flex justify-center mt-8">
           <button

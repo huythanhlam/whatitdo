@@ -14,7 +14,7 @@ import type { EnrichedEvent } from '@/lib/types'
 const MAX_CHIPS = 3
 
 // The visible month is URL state (?cal=YYYY-MM), matching the app's URL-as-state
-// pattern, so the RSC can fetch the month window server-side (see app/page.tsx)
+// pattern, so the RSC can fetch the month window server-side (see app/[city]/page.tsx)
 // and hand it here. Month navigation is plain <Link>s — no client fetch, no
 // useEffect, no 1000-event client download.
 function calParam(year: number, month: number): string {
@@ -22,11 +22,11 @@ function calParam(year: number, month: number): string {
 }
 
 // Build a homepage URL for a given month, preserving the active filters.
-function monthHref(year: number, month: number, filterQs: string): string {
+function monthHref(year: number, month: number, filterQs: string, basePath: string): string {
   const qs = new URLSearchParams(filterQs)
   qs.set('view', 'calendar')
   qs.set('cal', calParam(year, month))
-  return `/?${qs.toString()}`
+  return `${basePath}?${qs.toString()}`
 }
 
 export function CalendarView({
@@ -34,11 +34,13 @@ export function CalendarView({
   year,
   month,
   filterQs,
+  basePath,
 }: {
   events: EnrichedEvent[]
   year: number
   month: number // 0-indexed
   filterQs: string
+  basePath: string
 }) {
   const byDay = new Map<string, EnrichedEvent[]>()
   for (const ev of events) {
@@ -59,7 +61,7 @@ export function CalendarView({
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-1">
           <Link
-            href={monthHref(prev.year, prev.month, filterQs)}
+            href={monthHref(prev.year, prev.month, filterQs, basePath)}
             aria-label="Previous month"
             className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 hover:text-violet-700 transition-colors"
           >
@@ -69,7 +71,7 @@ export function CalendarView({
             {MONTH_LABELS[month]} {year}
           </h2>
           <Link
-            href={monthHref(next.year, next.month, filterQs)}
+            href={monthHref(next.year, next.month, filterQs, basePath)}
             aria-label="Next month"
             className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 hover:text-violet-700 transition-colors"
           >
@@ -77,7 +79,7 @@ export function CalendarView({
           </Link>
         </div>
         <Link
-          href={monthHref(today.year, today.month, filterQs)}
+          href={monthHref(today.year, today.month, filterQs, basePath)}
           className="text-sm font-medium text-violet-700 hover:text-violet-900 px-2.5 py-1 rounded-md hover:bg-violet-50 transition-colors"
         >
           Today
@@ -98,7 +100,7 @@ export function CalendarView({
           {/* Day grid */}
           <div className="grid grid-cols-7 gap-px bg-slate-200 border border-slate-200 rounded-lg overflow-hidden">
             {cells.map(cell => (
-              <DayCellView key={cell.key} cell={cell} events={byDay.get(cell.key) ?? []} />
+              <DayCellView key={cell.key} cell={cell} events={byDay.get(cell.key) ?? []} basePath={basePath} />
             ))}
           </div>
         </div>
@@ -111,7 +113,7 @@ export function CalendarView({
   )
 }
 
-function DayCellView({ cell, events }: { cell: DayCell; events: EnrichedEvent[] }) {
+function DayCellView({ cell, events, basePath }: { cell: DayCell; events: EnrichedEvent[]; basePath: string }) {
   const extra = events.length - MAX_CHIPS
 
   return (
@@ -139,11 +141,11 @@ function DayCellView({ cell, events }: { cell: DayCell; events: EnrichedEvent[] 
 
       <div className="flex flex-col gap-0.5">
         {events.slice(0, MAX_CHIPS).map(ev => (
-          <EventChip key={ev.id} event={ev} />
+          <EventChip key={ev.id} event={ev} basePath={basePath} />
         ))}
         {extra > 0 && (
           <Link
-            href={`/?from=${cell.key}&to=${cell.key}`}
+            href={`${basePath}?from=${cell.key}&to=${cell.key}`}
             className="text-[11px] text-violet-600 hover:text-violet-800 hover:underline px-1"
           >
             +{extra} more
@@ -154,7 +156,7 @@ function DayCellView({ cell, events }: { cell: DayCell; events: EnrichedEvent[] 
   )
 }
 
-function EventChip({ event }: { event: EnrichedEvent }) {
+function EventChip({ event, basePath }: { event: EnrichedEvent; basePath: string }) {
   const color = event.categories?.[0]?.color ?? '#7c3aed'
   const time = new Date(event.start_time).toLocaleTimeString('en-US', {
     hour: 'numeric',
@@ -164,7 +166,7 @@ function EventChip({ event }: { event: EnrichedEvent }) {
 
   return (
     <Link
-      href={`/events/${event.id}`}
+      href={`${basePath}/events/${event.id}`}
       title={`${time} · ${event.title}`}
       className="group block rounded px-1 py-0.5 text-[11px] leading-tight truncate hover:brightness-95 transition"
       style={{ backgroundColor: color + '18', color }}
