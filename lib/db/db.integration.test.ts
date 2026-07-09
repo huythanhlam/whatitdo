@@ -423,6 +423,24 @@ describe('event moderation (migration 013)', () => {
   })
 })
 
+describe('is_free filter', () => {
+  it('listEvents(isFree: true) returns only free events', async () => {
+    const soon = new Date(Date.now() + 12 * 24 * 3600 * 1000).toISOString()
+    await insertEvent(
+      mk({ source: 'itest', source_id: 'free-1', title: 'Free Filter Test Event', start_time: soon, is_free: true }),
+      { cityId: 1, titleNorm: 'free filter test event', venueNorm: null }
+    )
+    await insertEvent(
+      mk({ source: 'itest', source_id: 'paid-1', title: 'Paid Filter Test Event', start_time: soon, is_free: false }),
+      { cityId: 1, titleNorm: 'paid filter test event', venueNorm: null }
+    )
+
+    const free = await listEvents({ cityId: 1, q: 'Filter Test Event', isFree: true, limit: 10, offset: 0 })
+    expect(free.some(e => e.source_id === 'free-1')).toBe(true)
+    expect(free.some(e => e.source_id === 'paid-1')).toBe(false)
+  })
+})
+
 function mk(overrides: Partial<RawEvent>): RawEvent {
   return {
     title: 'Integration Test Show',
