@@ -1,6 +1,7 @@
 import type { MetadataRoute } from 'next'
 import { listEvents, getEnabledCities } from '@/lib/db'
 import { getBaseUrl } from '@/lib/site'
+import { SEO_PAGES } from '@/lib/seoPages'
 
 // NOTE: this is deliberately a plain Route Handler rather than the
 // `sitemap.ts` metadata-file convention. In the installed Next.js version
@@ -78,6 +79,12 @@ export async function GET(
       }
     })
 
+    const seoPageUrls: MetadataRoute.Sitemap = SEO_PAGES.map(p => ({
+      url: `${base}/${citySlug}/${p.slug}`,
+      changeFrequency: 'daily',
+      priority: 0.6,
+    }))
+
     entries = [
       { url: `${base}/${citySlug}`, changeFrequency: 'hourly', priority: 1 },
       {
@@ -85,6 +92,7 @@ export async function GET(
         changeFrequency: 'monthly',
         priority: 0.3,
       },
+      ...seoPageUrls,
       ...eventUrls,
     ]
   }

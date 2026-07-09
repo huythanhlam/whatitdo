@@ -3,7 +3,7 @@ import Link from 'next/link'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { EventList } from '@/components/EventList'
-import { listEvents, countEvents } from '@/lib/db'
+import { listEvents, countEvents, getCityBySlug } from '@/lib/db'
 import { requireCity } from '@/lib/cities'
 import { resolveDateRange } from '@/lib/dateRanges'
 import { getSeoPage, SEO_PAGES } from '@/lib/seoPages'
@@ -23,10 +23,17 @@ export async function generateMetadata({
   const { city: citySlug, seoSlug } = await params
   const config = getSeoPage(seoSlug)
   if (!config) return {}
+
+  const city = await getCityBySlug(citySlug)
+  const cityName = city?.name ?? citySlug
+  const description = config.description(cityName)
+
   return {
     title: config.title,
-    description: config.description(citySlug),
+    description,
     alternates: { canonical: `/${citySlug}/${seoSlug}` },
+    openGraph: { title: `${config.title} in ${cityName}`, description, type: 'website' },
+    twitter: { card: 'summary_large_image', title: `${config.title} in ${cityName}`, description },
   }
 }
 
