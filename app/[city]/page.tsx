@@ -101,6 +101,11 @@ async function EventsLoader({ city, searchParams }: { city: City; searchParams: 
 
   return (
     <EventList
+      // Remount when the filter query string changes so EventList's internal
+      // events/page/done state (seeded once from initialEvents on mount) resets
+      // to match the new server-filtered results, instead of a stale client-side
+      // navigation leaving the previous filter's events on screen.
+      key={qs.toString()}
       initialEvents={events as unknown as EnrichedEvent[]}
       query={qs.toString()}
       total={total}
