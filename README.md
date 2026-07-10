@@ -104,8 +104,11 @@ curl -X POST http://localhost:3000/api/subscribe \
 ### 1. Database (required)
 
 1. Create a project at [supabase.com/dashboard](https://supabase.com/dashboard) (free tier is fine).
-2. **Settings → Database → Connection pooling** → copy the **URI** (the Supavisor
-   pooler string) → set it as `DATABASE_URL` in `.env.local`.
+2. **Settings → Database → Connection pooling → "Transaction" tab** → copy the
+   **URI** (port `6543`) → set it as `DATABASE_URL` in `.env.local`. Use the
+   Transaction pooler, not Session (port `5432`) — the app opens a `pg` Pool
+   per serverless instance, and Session mode's low client cap gets exhausted
+   by ordinary traffic ("max clients reached in session mode").
 3. Apply the schema:
 
    ```bash
