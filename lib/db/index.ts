@@ -453,16 +453,26 @@ export async function upgradeVenueGeocode(
 // Distinct neighborhoods with at least one successfully-geocoded venue, for
 // the subscribe form's neighborhood picker (Phase 5: personalized digests).
 // A city with no geocoded venues yet (no GOOGLE_GEOCODING_API_KEY, or the
-// backfill hasn't run) simply returns an empty list.
+// backfill hasn't run) simply returns an empty list. Also called from the
+// [city]/subscribe page, which is statically prerendered at build time
+// (generateStaticParams on app/[city]/layout.tsx) — the query is guarded so a
+// migration that hasn't reached the build-time database yet (README's "a
+// branch that adds a migration only previews correctly once its migration is
+// on the DB") degrades to "no neighborhood filter" instead of failing the build.
 export async function getDistinctNeighborhoods(cityId: number): Promise<string[]> {
-  const db = await getDb()
-  const rows = await db.query<{ neighborhood: string }>(
-    `SELECT DISTINCT neighborhood FROM venues
-     WHERE city_id = $1 AND status = 'ok' AND neighborhood IS NOT NULL
-     ORDER BY neighborhood`,
-    [cityId]
-  )
-  return rows.map(r => r.neighborhood)
+  try {
+    const db = await getDb()
+    const rows = await db.query<{ neighborhood: string }>(
+      `SELECT DISTINCT neighborhood FROM venues
+       WHERE city_id = $1 AND status = 'ok' AND neighborhood IS NOT NULL
+       ORDER BY neighborhood`,
+      [cityId]
+    )
+    return rows.map(r => r.neighborhood)
+  } catch (e) {
+    console.error('getDistinctNeighborhoods failed (degrading to no neighborhood filter):', e)
+    return []
+  }
 }
 
 // Distinct venues already present in `events`, for the one-off geocode
