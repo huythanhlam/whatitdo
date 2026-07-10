@@ -39,19 +39,44 @@ function budgetRemaining(): number {
 let warnedMissingKey = false
 
 export type GeocodeResult =
-  | { status: 'ok'; lat: number; lng: number; formattedAddress: string }
+  | { status: 'ok'; lat: number; lng: number; formattedAddress: string; neighborhood: string | null }
   | { status: 'zero_results' }
   | { status: 'error' }
 
+type AddressComponent = { long_name?: string; types?: string[] }
+
+// Google doesn't have a single reliable "neighborhood" type across all
+// address shapes, so try the closest match first: a real neighborhood
+// component, then the sublocality tiers used for finer-grained areas.
+const NEIGHBORHOOD_TYPES = ['neighborhood', 'sublocality_level_1', 'sublocality']
+
+function extractNeighborhood(components: AddressComponent[] | undefined): string | null {
+  if (!components) return null
+  for (const type of NEIGHBORHOOD_TYPES) {
+    const match = components.find(c => c.types?.includes(type))
+    if (match?.long_name) return match.long_name
+  }
+  return null
+}
+
 // Pure — maps Google's Geocoding API response shape to our normalized result.
 export function parseGeocodeResponse(json: unknown): GeocodeResult {
-  const j = json as { status?: string; results?: { geometry?: { location?: { lat: number; lng: number } }; formatted_address?: string }[] } | null
+  const j = json as {
+    status?: string
+    results?: { geometry?: { location?: { lat: number; lng: number } }; formatted_address?: string; address_components?: AddressComponent[] }[]
+  } | null
   if (!j || typeof j !== 'object') return { status: 'error' }
   if (j.status === 'ZERO_RESULTS') return { status: 'zero_results' }
   if (j.status !== 'OK' || !j.results?.length) return { status: 'error' }
   const loc = j.results[0].geometry?.location
   if (!loc) return { status: 'error' }
-  return { status: 'ok', lat: loc.lat, lng: loc.lng, formattedAddress: j.results[0].formatted_address ?? '' }
+  return {
+    status: 'ok',
+    lat: loc.lat,
+    lng: loc.lng,
+    formattedAddress: j.results[0].formatted_address ?? '',
+    neighborhood: extractNeighborhood(j.results[0].address_components),
+  }
 }
 
 // Thin fetch wrapper — deliberately untested (mirrors lib/sources/ticketmaster.ts's
@@ -109,7 +134,7 @@ export async function ensureVenueGeocoded(opts: {
       const upgraded = await geocodeAddress(upgradeQuery)
       if (upgraded.status === 'ok') {
         await upgradeVenueGeocode(opts.cityId, opts.venueNorm, {
-          lat: upgraded.lat, lng: upgraded.lng, formattedAddress: upgraded.formattedAddress,
+          lat: upgraded.lat, lng: upgraded.lng, formattedAddress: upgraded.formattedAddress, neighborhood: upgraded.neighborhood,
         })
       }
       // zero_results/error on the upgrade attempt: leave the existing cached
@@ -127,7 +152,8 @@ export async function ensureVenueGeocoded(opts: {
     if (result.status === 'ok') {
       await upsertVenueGeocode({
         cityId: opts.cityId, venueNorm: opts.venueNorm, venueName: opts.venueName,
-        status: 'ok', lat: result.lat, lng: result.lng, formattedAddress: result.formattedAddress, usedAddress,
+        status: 'ok', lat: result.lat, lng: result.lng, formattedAddress: result.formattedAddress,
+        neighborhood: result.neighborhood, usedAddress,
       })
     } else if (result.status === 'zero_results') {
       await upsertVenueGeocode({ cityId: opts.cityId, venueNorm: opts.venueNorm, venueName: opts.venueName, status: 'zero_results', usedAddress })

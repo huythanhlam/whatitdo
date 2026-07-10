@@ -49,6 +49,10 @@ export type EnrichedEvent = Event & {
   // the venues geocode cache; every other read path leaves these undefined.
   lat?: number | null
   lng?: number | null
+  // Only populated by getEventsBetween (Phase 5 personalized digests) via the
+  // same venues join, keyed off venue_norm; null when the venue has no
+  // geocoded neighborhood (or wasn't geocoded at all).
+  neighborhood?: string | null
 }
 
 export type Subscription = {
@@ -59,6 +63,8 @@ export type Subscription = {
   category_slugs: string[]
   token: string
   confirmed: boolean
+  free_only: boolean
+  neighborhoods: string[]
   created_at: string
 }
 

@@ -6,13 +6,25 @@ import { parseGeocodeResponse } from './geocode'
 const fixture = (name: string) => JSON.parse(readFileSync(path.join(__dirname, '__fixtures__', name), 'utf8'))
 
 describe('parseGeocodeResponse', () => {
-  it('extracts lat/lng and formatted address from an OK response', () => {
+  it('extracts lat/lng, formatted address, and neighborhood from an OK response', () => {
     const result = parseGeocodeResponse(fixture('geocode-ok.json'))
     expect(result).toEqual({
       status: 'ok',
       lat: 30.267985,
       lng: -97.7381,
       formattedAddress: '912 Red River St, Austin, TX 78701, USA',
+      neighborhood: 'Downtown',
+    })
+  })
+
+  it('returns neighborhood: null when Google has no neighborhood-typed address component', () => {
+    const result = parseGeocodeResponse(fixture('geocode-ok-no-neighborhood.json'))
+    expect(result).toEqual({
+      status: 'ok',
+      lat: 30.2711,
+      lng: -97.7597,
+      formattedAddress: '1500 W 6th St, Austin, TX 78703, USA',
+      neighborhood: null,
     })
   })
 
@@ -64,7 +76,7 @@ describe('ensureVenueGeocoded', () => {
     const { getVenueGeocode, upsertVenueGeocode, upgradeVenueGeocode } = await import('@/lib/db')
     vi.mocked(getVenueGeocode).mockResolvedValue({
       city_id: 1, venue_norm: 'precise venue', venue_name: 'Precise Venue',
-      lat: 1, lng: 1, formatted_address: 'x', status: 'ok', used_address: true,
+      lat: 1, lng: 1, formatted_address: 'x', neighborhood: null, status: 'ok', used_address: true,
     })
 
     const { ensureVenueGeocoded } = await import('./geocode')
@@ -81,7 +93,7 @@ describe('ensureVenueGeocoded', () => {
     const { getVenueGeocode, upsertVenueGeocode, upgradeVenueGeocode } = await import('@/lib/db')
     vi.mocked(getVenueGeocode).mockResolvedValue({
       city_id: 1, venue_norm: 'name only venue', venue_name: 'Name Only Venue',
-      lat: 1, lng: 1, formatted_address: 'x', status: 'ok', used_address: false,
+      lat: 1, lng: 1, formatted_address: 'x', neighborhood: null, status: 'ok', used_address: false,
     })
 
     const { ensureVenueGeocoded } = await import('./geocode')
@@ -105,7 +117,11 @@ describe('ensureVenueGeocoded', () => {
       ok: true,
       json: async () => ({
         status: 'OK',
-        results: [{ geometry: { location: { lat: 30.5, lng: -97.5 } }, formatted_address: '789 Precise St, Austin, TX' }],
+        results: [{
+          geometry: { location: { lat: 30.5, lng: -97.5 } },
+          formatted_address: '789 Precise St, Austin, TX',
+          address_components: [{ long_name: 'East Austin', types: ['neighborhood', 'political'] }],
+        }],
       }),
     }))
 
@@ -113,7 +129,7 @@ describe('ensureVenueGeocoded', () => {
       const { getVenueGeocode, upgradeVenueGeocode, upsertVenueGeocode } = await import('@/lib/db')
       vi.mocked(getVenueGeocode).mockResolvedValue({
         city_id: 1, venue_norm: 'upgrade success venue', venue_name: 'Upgrade Success Venue',
-        lat: 1, lng: 1, formatted_address: 'coarse', status: 'ok', used_address: false,
+        lat: 1, lng: 1, formatted_address: 'coarse', neighborhood: null, status: 'ok', used_address: false,
       })
 
       const { ensureVenueGeocoded } = await import('./geocode')
@@ -123,7 +139,7 @@ describe('ensureVenueGeocoded', () => {
       })
 
       expect(upgradeVenueGeocode).toHaveBeenCalledWith(1, 'upgrade success venue', {
-        lat: 30.5, lng: -97.5, formattedAddress: '789 Precise St, Austin, TX',
+        lat: 30.5, lng: -97.5, formattedAddress: '789 Precise St, Austin, TX', neighborhood: 'East Austin',
       })
       expect(upsertVenueGeocode).not.toHaveBeenCalled()
     } finally {
