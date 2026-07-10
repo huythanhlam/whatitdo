@@ -450,6 +450,39 @@ export async function upgradeVenueGeocode(
   )
 }
 
+export type VenueImage = {
+  city_id: number
+  venue_norm: string
+  image_url: string | null
+}
+
+export async function getVenueImage(cityId: number, venueNorm: string): Promise<VenueImage | null> {
+  const db = await getDb()
+  const rows = await db.query<VenueImage>(
+    `SELECT city_id, venue_norm, image_url FROM venue_images WHERE city_id = $1 AND venue_norm = $2`,
+    [cityId, venueNorm]
+  )
+  return rows[0] ?? null
+}
+
+// ON CONFLICT DO NOTHING: once a venue's image has been checked (even a null
+// "no image found" result), it's never re-fetched — mirrors
+// upsertVenueGeocode's "resolved once, ever" cache.
+export async function upsertVenueImage(v: {
+  cityId: number
+  venueNorm: string
+  venueName: string
+  imageUrl: string | null
+}): Promise<void> {
+  const db = await getDb()
+  await db.query(
+    `INSERT INTO venue_images (city_id, venue_norm, venue_name, image_url)
+     VALUES ($1,$2,$3,$4)
+     ON CONFLICT (city_id, venue_norm) DO NOTHING`,
+    [v.cityId, v.venueNorm, v.venueName, v.imageUrl]
+  )
+}
+
 // Distinct neighborhoods with at least one successfully-geocoded venue, for
 // the subscribe form's neighborhood picker (Phase 5: personalized digests).
 // A city with no geocoded venues yet (no GOOGLE_GEOCODING_API_KEY, or the

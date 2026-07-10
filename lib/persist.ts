@@ -1,5 +1,6 @@
 import { tagEvents } from '@/lib/tagger'
 import { imageForCategories } from '@/lib/images'
+import { ensureVenueImage } from '@/lib/venueImage'
 import {
   getCategoryIdBySlug, setEventCategories,
   findEventBySource, findDedupCandidates, insertEvent,
@@ -10,6 +11,7 @@ import { normalizeTitle, normalizeVenue } from '@/lib/normalize'
 import { chooseMatch, mergeFields } from '@/lib/dedup'
 import { ensureVenueGeocoded } from '@/lib/geocode'
 import type { RawEvent } from '@/lib/sources/types'
+import type { CategorySlug } from '@/lib/categories'
 
 // The single validation gate. A fabricated or nonsensical date is worse than no
 // event — it actively misleads users — so an event is rejected when its
@@ -51,10 +53,6 @@ export async function persistEvents(
   const categoryIdBySlug = await getCategoryIdBySlug()
   const slugs = await tagEvents(events.map(e => ({ title: e.title, description: e.description })))
 
-  events.forEach((raw, i) => {
-    if (!raw.image_url) raw.image_url = imageForCategories(slugs[i])
-  })
-
   // Fetched once per batch (not per event) for ensureVenueGeocoded's city-name
   // fallback query — cityId is constant across the whole call.
   const city = await getCityById(cityId)
@@ -62,8 +60,10 @@ export async function persistEvents(
   // Venues repeat heavily within a batch (many events at the same handful of
   // venues); this Set skips the geocode-cache lookup entirely for a venueNorm
   // already checked earlier in THIS run, instead of re-querying the venues
-  // table once per event.
+  // table once per event. venueImageCache does the same for the venue-image
+  // lookaside below.
   const checkedVenues = new Set<string>()
+  const venueImageCache = new Map<string, string | null>()
 
   let inserted = 0
   let skipped = 0
@@ -73,7 +73,7 @@ export async function persistEvents(
   // Ingest already runs sources concurrently; within a source, order matters.
   for (let i = 0; i < events.length; i++) {
     try {
-      const eventId = await persistOne(events[i], cityId, status, city, checkedVenues)
+      const eventId = await persistOne(events[i], cityId, status, city, checkedVenues, venueImageCache, slugs[i])
       const categoryIds = slugs[i].map(s => categoryIdBySlug[s]).filter(Boolean)
       await setEventCategories(eventId, categoryIds)
       inserted++
@@ -88,7 +88,8 @@ export async function persistEvents(
 // Resolve one raw event to a canonical event id, creating, matching, or merging
 // as needed, and always recording provenance. Returns the canonical event id.
 async function persistOne(
-  raw: RawEvent, cityId: number, status: EventStatus, city: City | null, checkedVenues: Set<string>
+  raw: RawEvent, cityId: number, status: EventStatus, city: City | null, checkedVenues: Set<string>,
+  venueImageCache: Map<string, string | null>, categorySlugs: CategorySlug[]
 ): Promise<string> {
   const titleNorm = normalizeTitle(raw.title, raw.venue_name)
   const venueNorm = normalizeVenue(raw.venue_name)
@@ -102,6 +103,23 @@ async function persistOne(
   if (venueNorm && city && !checkedVenues.has(venueNorm)) {
     checkedVenues.add(venueNorm)
     await ensureVenueGeocoded({ cityId, venueNorm, venueName: raw.venue_name!, venueAddress: raw.venue_address, city })
+  }
+
+  // Every event needs an image. Prefer one the source itself supplied; failing
+  // that, the venue's own site header image (fetched once per venue, ever —
+  // see ensureVenueImage); only fall back to a generic category stock photo
+  // when neither is available.
+  if (!raw.image_url) {
+    if (venueNorm) {
+      if (!venueImageCache.has(venueNorm)) {
+        venueImageCache.set(
+          venueNorm,
+          await ensureVenueImage({ cityId, venueNorm, venueName: raw.venue_name!, venueUrl: raw.ticket_url })
+        )
+      }
+      raw.image_url = venueImageCache.get(venueNorm) ?? null
+    }
+    if (!raw.image_url) raw.image_url = imageForCategories(categorySlugs)
   }
 
   // 1. Idempotency: already seen this exact (source, external_id)?
