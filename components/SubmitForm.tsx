@@ -62,11 +62,11 @@ export function SubmitForm() {
           className="w-full border rounded-md px-3 py-2 text-sm"
         />
       </div>
-      {status === 'error' && <p className="text-sm text-red-500">{message}</p>}
+      {status === 'error' && <p className="text-sm text-destructive">{message}</p>}
       <Button
         type="submit"
         disabled={status === 'loading' || (!url.trim() && !text.trim())}
-        className="w-full bg-violet-600 hover:bg-violet-700 text-white"
+        className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
       >
         {status === 'loading' ? 'Submitting…' : 'Submit event'}
       </Button>

@@ -72,15 +72,15 @@ export default async function EventDetailPage({
   return (
     <div className="min-h-screen bg-background">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <header className="border-b bg-white/95 sticky top-0 z-40">
+      <header className="border-b bg-card/95 sticky top-0 z-40">
         <div className="max-w-3xl mx-auto px-4 py-3">
-          <Link href={`/${citySlug}`} className="text-sm text-violet-600 hover:underline">← Back to events</Link>
+          <Link href={`/${citySlug}`} className="text-sm text-primary hover:underline">← Back to events</Link>
         </div>
       </header>
 
       <div className="max-w-3xl mx-auto px-4 py-8">
         {event.image_url && (
-          <div className="relative w-full h-64 rounded-xl overflow-hidden mb-6 shadow-sm bg-slate-100">
+          <div className="relative w-full h-64 rounded-xl overflow-hidden mb-6 shadow-sm bg-muted">
             <Image
               src={event.image_url}
               alt={event.title}
@@ -104,29 +104,29 @@ export default async function EventDetailPage({
           ))}
         </div>
 
-        <h1 className="text-2xl font-bold mb-4 text-slate-900">{event.title}</h1>
+        <h1 className="text-2xl font-bold mb-4 text-foreground">{event.title}</h1>
 
-        <div className="space-y-2 mb-6 text-sm text-slate-600">
+        <div className="space-y-2 mb-6 text-sm text-muted-foreground">
           <p>📅 {dateStr} at {timeStr}</p>
           {event.venue_name && (
             <p>📍 {event.venue_name}{event.venue_address ? ` · ${event.venue_address}` : ''}</p>
           )}
           <p>{event.is_free ? '🆓 Free entry' : `💰 ${priceLabel}`}</p>
-          <p className="text-xs text-slate-400">Source: {event.source}</p>
+          <p className="text-xs text-muted-foreground">Source: {event.source}</p>
           {otherSources.length > 0 && (
-            <p className="text-xs text-slate-400">Also listed on {otherSources.join(', ')}</p>
+            <p className="text-xs text-muted-foreground">Also listed on {otherSources.join(', ')}</p>
           )}
         </div>
 
         {event.description && (
-          <p className="text-sm leading-relaxed mb-6 text-slate-700 whitespace-pre-line">
+          <p className="text-sm leading-relaxed mb-6 text-foreground whitespace-pre-line">
             {event.description}
           </p>
         )}
 
         <div className="flex gap-3 flex-wrap">
           {event.ticket_url && ticketCta && (
-            <Button asChild className="bg-violet-600 hover:bg-violet-700">
+            <Button asChild className="bg-primary hover:bg-primary/90">
               <a href={event.ticket_url} target="_blank" rel="noopener noreferrer">
                 🎟 {ticketCta} →
               </a>
@@ -137,7 +137,7 @@ export default async function EventDetailPage({
           </Button>
         </div>
         {event.ticket_url && provider && provider.name !== 'venue site' && (
-          <p className="mt-2 text-xs text-slate-400">Tickets provided by {provider.name}</p>
+          <p className="mt-2 text-xs text-muted-foreground">Tickets provided by {provider.name}</p>
         )}
       </div>
     </div>

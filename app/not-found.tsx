@@ -12,8 +12,8 @@ export default async function NotFound() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="text-center max-w-md">
-        <h1 className="text-xl font-semibold text-slate-800 mb-2">Page not found</h1>
-        <p className="text-sm text-slate-500 mb-6">
+        <h1 className="text-xl font-semibold text-foreground mb-2">Page not found</h1>
+        <p className="text-sm text-muted-foreground mb-6">
           That event or page doesn&apos;t exist or may have ended.
         </p>
         <BackToEventsLink citySlugs={citySlugs} fallbackCity={citySlugs[0] ?? 'austin'} />

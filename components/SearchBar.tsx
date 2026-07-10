@@ -35,7 +35,7 @@ export function SearchBar() {
         className="pl-8"
       />
       {isPending && (
-        <div className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
       )}
     </div>
   )

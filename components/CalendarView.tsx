@@ -63,24 +63,24 @@ export function CalendarView({
           <Link
             href={monthHref(prev.year, prev.month, filterQs, basePath)}
             aria-label="Previous month"
-            className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 hover:text-violet-700 transition-colors"
+            className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-primary transition-colors"
           >
             <ChevronLeft className="w-5 h-5" />
           </Link>
-          <h2 className="text-base font-semibold text-slate-800 min-w-[10rem] text-center">
+          <h2 className="text-base font-semibold text-foreground min-w-[10rem] text-center">
             {MONTH_LABELS[month]} {year}
           </h2>
           <Link
             href={monthHref(next.year, next.month, filterQs, basePath)}
             aria-label="Next month"
-            className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 hover:text-violet-700 transition-colors"
+            className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-primary transition-colors"
           >
             <ChevronRight className="w-5 h-5" />
           </Link>
         </div>
         <Link
           href={monthHref(today.year, today.month, filterQs, basePath)}
-          className="text-sm font-medium text-violet-700 hover:text-violet-900 px-2.5 py-1 rounded-md hover:bg-violet-50 transition-colors"
+          className="text-sm font-medium text-primary hover:text-primary/90 px-2.5 py-1 rounded-md hover:bg-accent transition-colors"
         >
           Today
         </Link>
@@ -89,7 +89,7 @@ export function CalendarView({
       <div className="relative overflow-x-auto">
         <div className="min-w-[640px]">
           {/* Weekday header */}
-          <div className="grid grid-cols-7 text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">
+          <div className="grid grid-cols-7 text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
             {WEEKDAY_LABELS.map(w => (
               <div key={w} className="px-2 py-1 text-center">
                 {w}
@@ -98,7 +98,7 @@ export function CalendarView({
           </div>
 
           {/* Day grid */}
-          <div className="grid grid-cols-7 gap-px bg-slate-200 border border-slate-200 rounded-lg overflow-hidden">
+          <div className="grid grid-cols-7 gap-px bg-border border border-border rounded-lg overflow-hidden">
             {cells.map(cell => (
               <DayCellView key={cell.key} cell={cell} events={byDay.get(cell.key) ?? []} basePath={basePath} />
             ))}
@@ -119,23 +119,23 @@ function DayCellView({ cell, events, basePath }: { cell: DayCell; events: Enrich
   return (
     <div
       className={`min-h-[7rem] p-1.5 flex flex-col gap-1 ${
-        cell.inMonth ? 'bg-white' : 'bg-slate-50'
+        cell.inMonth ? 'bg-card' : 'bg-muted'
       }`}
     >
       <div className="flex items-center justify-between">
         <span
           className={`text-xs font-medium w-5 h-5 flex items-center justify-center rounded-full ${
             cell.isToday
-              ? 'bg-violet-600 text-white'
+              ? 'bg-primary text-primary-foreground'
               : cell.inMonth
-              ? 'text-slate-700'
-              : 'text-slate-300'
+              ? 'text-foreground'
+              : 'text-muted-foreground'
           }`}
         >
           {cell.d}
         </span>
         {events.length > 0 && (
-          <span className="text-[10px] text-slate-400">{events.length}</span>
+          <span className="text-[10px] text-muted-foreground">{events.length}</span>
         )}
       </div>
 
@@ -146,7 +146,7 @@ function DayCellView({ cell, events, basePath }: { cell: DayCell; events: Enrich
         {extra > 0 && (
           <Link
             href={`${basePath}?from=${cell.key}&to=${cell.key}`}
-            className="text-[11px] text-violet-600 hover:text-violet-800 hover:underline px-1"
+            className="text-[11px] text-primary hover:text-primary/90 hover:underline px-1"
           >
             +{extra} more
           </Link>
@@ -157,7 +157,7 @@ function DayCellView({ cell, events, basePath }: { cell: DayCell; events: Enrich
 }
 
 function EventChip({ event, basePath }: { event: EnrichedEvent; basePath: string }) {
-  const color = event.categories?.[0]?.color ?? '#7c3aed'
+  const color = event.categories?.[0]?.color ?? '#C1502E'
   const time = new Date(event.start_time).toLocaleTimeString('en-US', {
     hour: 'numeric',
     minute: '2-digit',
@@ -172,7 +172,7 @@ function EventChip({ event, basePath }: { event: EnrichedEvent; basePath: string
       style={{ backgroundColor: color + '18', color }}
     >
       <span className="font-medium tabular-nums">{time}</span>{' '}
-      <span className="text-slate-700 group-hover:text-slate-900">{event.title}</span>
+      <span className="text-foreground">{event.title}</span>
     </Link>
   )
 }
