@@ -135,7 +135,7 @@ Set is_event=false (and nothing else) when the item is:
 - recurring/ongoing with no specific upcoming occurrence
 
 When is_event=true, also return:
-- "title": a concise event name
+- "title": the specific act, artist, comedian, speaker, team, or performer name(s) if the text names any — e.g. "Black Pumas" or "Nate Bargatze" rather than "Live Music Night" or "Comedy Showcase". The venue is shown separately elsewhere, so do not use a generic "<genre/category> at <venue>" title when a specific name is available; only fall back to a genre/category description when the text truly names no performer (e.g. an open mic, trivia night, or unnamed rotating lineup).
 - "start_time": ISO 8601 with timezone, resolving any relative dates against the reference date. Use America/Chicago (-05:00/-06:00) if no timezone is stated. If only a date is known, use 19:00 local.
 - "end_time": ISO 8601 or null
 - "venue_name": string or null
@@ -145,7 +145,7 @@ When is_event=true, also return:
 - "price_max": number or null
 
 Respond with ONLY a JSON object mapping each item number (as a string) to its object. No markdown, no commentary.
-Example: {"0":{"is_event":false},"1":{"is_event":true,"title":"Mohawk Indie Night","start_time":"2026-07-04T20:00:00-05:00","end_time":null,"venue_name":"Mohawk","venue_address":null,"is_free":false,"price_min":15,"price_max":25}}
+Example: {"0":{"is_event":false},"1":{"is_event":true,"title":"Black Pumas w/ Being Dead","start_time":"2026-07-04T20:00:00-05:00","end_time":null,"venue_name":"Mohawk","venue_address":null,"is_free":false,"price_min":15,"price_max":25}}
 
 Items:
 ${list}
@@ -231,7 +231,7 @@ PAGE TITLE: ${page.title ?? '(none)'}
 Return a JSON ARRAY with one object per SPECIFIC, UPCOMING, real-world event you can identify (a concert, festival, show, market, meetup, screening, game, etc.). If the page lists none, return [].
 
 For each event include:
-- "title": concise event name
+- "title": the specific act, artist, comedian, speaker, team, or performer name(s) if the page names any — e.g. "Black Pumas" or "Nate Bargatze" rather than "Live Music Night" or "Comedy Showcase". The venue is shown separately elsewhere, so avoid a generic "<genre/category> at <venue>" title when a specific name is available; only fall back to a genre/category description when the page truly names no performer (e.g. an open mic, trivia night, or unnamed rotating lineup).
 - "description": one-sentence blurb (optional)
 - "url": the event's own link if the page gives one, else null
 - "start_time": ISO 8601 with timezone, resolving relative dates against the reference date. Use America/Chicago if no timezone is stated; if only a date is known use 19:00 local.

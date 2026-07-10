@@ -158,7 +158,7 @@ export default async function CityHomePage({
       <header className="border-b sticky top-0 z-40 bg-card/95 backdrop-blur-sm shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-4">
           <Link href={base} className="font-bold text-lg text-primary shrink-0 whitespace-nowrap">
-            🎉 What It Do {city.name}
+            🎉 Whats Happenin {city.name}
           </Link>
           <div className="flex-1 max-w-xl">
             <Suspense fallback={<div className="h-9 bg-muted rounded-md animate-pulse" />}>
