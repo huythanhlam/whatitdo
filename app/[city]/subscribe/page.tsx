@@ -1,6 +1,39 @@
 import Link from 'next/link'
+import type { Metadata } from 'next'
 import { SubscribeForm } from '@/components/SubscribeForm'
 import { requireCity } from '@/lib/cities'
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ city: string }>
+}): Promise<Metadata> {
+  const { city: citySlug } = await params
+  const city = await requireCity(citySlug)
+
+  const title = `Subscribe to ${city.name} Events`
+  const description = `Get a daily digest of ${city.name} events in your inbox — concerts, festivals, comedy, food & drink, arts, and more. No spam, ever.`
+
+  // openGraph/twitter are shallowly overwritten (not deep-merged) across nested
+  // metadata exports, so siteName/locale/type from the root layout must be
+  // repeated here or they'd be dropped for this page.
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      siteName: 'What It Do',
+      locale: 'en_US',
+      type: 'website',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+    },
+  }
+}
 
 export default async function SubscribePage({ params }: { params: Promise<{ city: string }> }) {
   const { city: citySlug } = await params

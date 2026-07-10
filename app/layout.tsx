@@ -13,22 +13,22 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const TITLE = "What It Do ATX — Austin Events, Concerts & Things To Do";
+const TITLE = "What It Do — Local Events, Concerts & Things To Do";
 const DESCRIPTION =
-  "Discover things to do in Austin: concerts, festivals, comedy, food & drink, arts, and more — aggregated daily from across the city and searchable by date and category.";
+  "Discover things to do in your city: concerts, festivals, comedy, food & drink, arts, and more — aggregated daily and searchable by date and category.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(getBaseUrl()),
   title: {
     default: TITLE,
-    template: "%s · What It Do ATX",
+    template: "%s · What It Do",
   },
   description: DESCRIPTION,
-  applicationName: "What It Do ATX",
+  applicationName: "What It Do",
   openGraph: {
     title: TITLE,
     description: DESCRIPTION,
-    siteName: "What It Do ATX",
+    siteName: "What It Do",
     locale: "en_US",
     type: "website",
   },
