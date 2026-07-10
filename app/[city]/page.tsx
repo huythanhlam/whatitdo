@@ -4,8 +4,9 @@ import { SearchBar } from '@/components/SearchBar'
 import { SidebarFilters } from '@/components/SidebarFilters'
 import { EventList } from '@/components/EventList'
 import { CalendarView } from '@/components/CalendarView'
+import { MapView } from '@/components/MapView'
 import { ViewToggle } from '@/components/ViewToggle'
-import { listEvents, countEvents, type City } from '@/lib/db'
+import { listEvents, countEvents, listEventsForMap, type City } from '@/lib/db'
 import { requireCity } from '@/lib/cities'
 import { resolveDateRange } from '@/lib/dateRanges'
 import { gridRangeIso, currentCentralMonth } from '@/lib/calendar'
@@ -62,6 +63,30 @@ async function CalendarLoader({ city, searchParams }: { city: City; searchParams
       basePath={`/${city.slug}`}
     />
   )
+}
+
+// Unlike CalendarLoader, the map respects the same q/category/date-range
+// filters as the grid (via listEventsForMap), so it needs the same
+// resolveDateRange call as EventsLoader — just without pagination, since the
+// map wants every matching pin, not one page of 24.
+async function MapLoader({ city, searchParams }: { city: City; searchParams: Record<string, string | string[]> }) {
+  const q = first(searchParams.q) ?? ''
+  const categories = toCategories(searchParams.category)
+  const range = resolveDateRange({
+    when: first(searchParams.when),
+    from: first(searchParams.from),
+    to: first(searchParams.to),
+  })
+
+  const events = await listEventsForMap({
+    cityId: city.id, q, categories, from: range.fromIso, to: range.toIso ?? undefined, limit: 1000,
+  })
+
+  const center = city.lat != null && city.lng != null
+    ? { lat: Number(city.lat), lng: Number(city.lng) }
+    : { lat: 30.2672, lng: -97.7431 } // Austin fallback, only hit if a city row has no lat/lng set
+
+  return <MapView events={events as unknown as EnrichedEvent[]} center={center} basePath={`/${city.slug}`} />
 }
 
 async function EventsLoader({ city, searchParams }: { city: City; searchParams: Record<string, string | string[]> }) {
@@ -124,7 +149,8 @@ export default async function CityHomePage({
   const { city: citySlug } = await params
   const city = await requireCity(citySlug)
   const sp = await searchParams
-  const view = first(sp.view) === 'calendar' ? 'calendar' : 'grid'
+  const rawView = first(sp.view)
+  const view = rawView === 'calendar' ? 'calendar' : rawView === 'map' ? 'map' : 'grid'
   const base = `/${city.slug}`
 
   return (
@@ -188,6 +214,15 @@ export default async function CityHomePage({
             <Suspense fallback={<div className="h-96 bg-slate-100 rounded-lg animate-pulse" />}>
               <CalendarLoader city={city} searchParams={sp} />
             </Suspense>
+          ) : view === 'map' ? (
+            <>
+              <Suspense fallback={<div className="h-9 bg-slate-100 rounded-md animate-pulse mb-5" />}>
+                <DateFilter />
+              </Suspense>
+              <Suspense fallback={<div className="h-[600px] bg-slate-100 rounded-lg animate-pulse" />}>
+                <MapLoader city={city} searchParams={sp} />
+              </Suspense>
+            </>
           ) : (
             <>
               <Suspense fallback={<div className="h-9 bg-slate-100 rounded-md animate-pulse mb-5" />}>

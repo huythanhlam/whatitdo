@@ -45,6 +45,10 @@ export type EnrichedEvent = Event & {
   is_featured?: boolean
   featured_label?: string | null
   sources?: EventSource[]
+  // Only populated by listEventsForMap (Phase 4 map view) via a join against
+  // the venues geocode cache; every other read path leaves these undefined.
+  lat?: number | null
+  lng?: number | null
 }
 
 export type Subscription = {

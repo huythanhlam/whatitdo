@@ -26,6 +26,11 @@ import {
   listPendingEvents,
   approveEvent,
   rejectEvent,
+  getVenueGeocode,
+  upsertVenueGeocode,
+  upgradeVenueGeocode,
+  getDistinctVenues,
+  listEventsForMap,
 } from './index'
 import { persistEvents } from '@/lib/persist'
 import type { RawEvent } from '@/lib/sources/types'
@@ -522,6 +527,137 @@ describe('is_free filter', () => {
     const free = await listEvents({ cityId: 1, q: 'Filter Test Event', isFree: true, limit: 10, offset: 0 })
     expect(free.some(e => e.source_id === 'free-1')).toBe(true)
     expect(free.some(e => e.source_id === 'paid-1')).toBe(false)
+  })
+})
+
+describe('persistEvents geocoding wiring (Phase 4 map view)', () => {
+  it('persists a venue-having event normally even when geocoding cannot run (no API key in this test env)', async () => {
+    const soon = new Date(Date.now() + 22 * 24 * 3600 * 1000).toISOString()
+    const res = await persistEvents([
+      mk({ source: 'itest', source_id: 'persist-geocode-1', title: 'Persist Geocode Wiring Show', venue_name: 'Persist Geocode Wiring Venue', start_time: soon }),
+    ], { cityId: 1 })
+    expect(res.inserted).toBe(1)
+
+    const found = await listEvents({ cityId: 1, q: 'Persist Geocode Wiring Show', limit: 5, offset: 0 })
+    expect(found.some(e => e.source_id === 'persist-geocode-1')).toBe(true)
+
+    // No key configured in this test environment, so geocodeAddress returns
+    // {status:'error'} and ensureVenueGeocoded caches nothing — confirms the
+    // failure path degrades silently instead of blocking the insert above.
+    expect(await getVenueGeocode(1, normalizeVenue('Persist Geocode Wiring Venue')!)).toBeNull()
+  })
+})
+
+describe('venue geocode cache (Phase 4 map view)', () => {
+  it('upsertVenueGeocode + getVenueGeocode round-trips an ok result', async () => {
+    const venueNorm = normalizeVenue('Geocode Roundtrip Venue')!
+    expect(await getVenueGeocode(1, venueNorm)).toBeNull()
+
+    await upsertVenueGeocode({
+      cityId: 1, venueNorm, venueName: 'Geocode Roundtrip Venue',
+      status: 'ok', lat: 30.27, lng: -97.74, formattedAddress: '123 Test St, Austin, TX',
+    })
+
+    const row = await getVenueGeocode(1, venueNorm)
+    expect(row).toMatchObject({
+      city_id: 1, venue_norm: venueNorm, status: 'ok',
+      formatted_address: '123 Test St, Austin, TX',
+    })
+    expect(Number(row!.lat)).toBeCloseTo(30.27)
+    expect(Number(row!.lng)).toBeCloseTo(-97.74)
+  })
+
+  it('ON CONFLICT DO NOTHING: a second upsert never overwrites the cached row', async () => {
+    const venueNorm = normalizeVenue('Geocode Conflict Venue')!
+    await upsertVenueGeocode({
+      cityId: 1, venueNorm, venueName: 'Geocode Conflict Venue',
+      status: 'ok', lat: 1, lng: 1, formattedAddress: 'first',
+    })
+    await upsertVenueGeocode({
+      cityId: 1, venueNorm, venueName: 'Geocode Conflict Venue',
+      status: 'ok', lat: 2, lng: 2, formattedAddress: 'second',
+    })
+    const row = await getVenueGeocode(1, venueNorm)
+    expect(row!.formatted_address).toBe('first')
+  })
+
+  it('caches a zero_results status with null lat/lng', async () => {
+    const venueNorm = normalizeVenue('Geocode Zero Results Venue')!
+    await upsertVenueGeocode({ cityId: 1, venueNorm, venueName: 'Geocode Zero Results Venue', status: 'zero_results' })
+    const row = await getVenueGeocode(1, venueNorm)
+    expect(row).toMatchObject({ status: 'zero_results', lat: null, lng: null })
+  })
+
+  it('defaults used_address to false, and upsertVenueGeocode(usedAddress: true) records it', async () => {
+    const nameOnlyNorm = normalizeVenue('Name Only Geocode Venue')!
+    await upsertVenueGeocode({ cityId: 1, venueNorm: nameOnlyNorm, venueName: 'Name Only Geocode Venue', status: 'ok', lat: 1, lng: 1, formattedAddress: 'x' })
+    expect((await getVenueGeocode(1, nameOnlyNorm))!.used_address).toBe(false)
+
+    const addressedNorm = normalizeVenue('Addressed Geocode Venue')!
+    await upsertVenueGeocode({ cityId: 1, venueNorm: addressedNorm, venueName: 'Addressed Geocode Venue', status: 'ok', lat: 1, lng: 1, formattedAddress: 'x', usedAddress: true })
+    expect((await getVenueGeocode(1, addressedNorm))!.used_address).toBe(true)
+  })
+
+  it('upgradeVenueGeocode replaces a name-only cached row with a better address-based result', async () => {
+    const venueNorm = normalizeVenue('Upgrade Geocode Venue')!
+    await upsertVenueGeocode({ cityId: 1, venueNorm, venueName: 'Upgrade Geocode Venue', status: 'ok', lat: 1, lng: 1, formattedAddress: 'coarse' })
+
+    await upgradeVenueGeocode(1, venueNorm, { lat: 30.5, lng: -97.5, formattedAddress: '456 Precise St, Austin, TX' })
+
+    const row = await getVenueGeocode(1, venueNorm)
+    expect(row!.used_address).toBe(true)
+    expect(row!.formatted_address).toBe('456 Precise St, Austin, TX')
+    expect(Number(row!.lat)).toBeCloseTo(30.5)
+  })
+
+  it('upgradeVenueGeocode is a no-op once used_address is already true (idempotent under races)', async () => {
+    const venueNorm = normalizeVenue('Already Upgraded Venue')!
+    await upsertVenueGeocode({ cityId: 1, venueNorm, venueName: 'Already Upgraded Venue', status: 'ok', lat: 1, lng: 1, formattedAddress: 'first-address', usedAddress: true })
+
+    await upgradeVenueGeocode(1, venueNorm, { lat: 99, lng: 99, formattedAddress: 'second-address' })
+
+    const row = await getVenueGeocode(1, venueNorm)
+    expect(row!.formatted_address).toBe('first-address')
+  })
+
+  it('getDistinctVenues returns distinct (city_id, venue_norm) pairs from events', async () => {
+    const soon = new Date(Date.now() + 20 * 24 * 3600 * 1000).toISOString()
+    await insertEvent(
+      mk({ source: 'itest', source_id: 'distinct-venue-1', title: 'Distinct Venue Show 1', venue_name: 'Distinct Venue Test', start_time: soon }),
+      { cityId: 1, titleNorm: 'distinct venue show 1', venueNorm: normalizeVenue('Distinct Venue Test') }
+    )
+    await insertEvent(
+      mk({ source: 'itest', source_id: 'distinct-venue-2', title: 'Distinct Venue Show 2', venue_name: 'Distinct Venue Test', start_time: soon }),
+      { cityId: 1, titleNorm: 'distinct venue show 2', venueNorm: normalizeVenue('Distinct Venue Test') }
+    )
+    const venues = await getDistinctVenues()
+    const matches = venues.filter(v => v.venue_norm === normalizeVenue('Distinct Venue Test'))
+    expect(matches).toHaveLength(1)
+    expect(matches[0].city_id).toBe(1)
+  })
+
+  it('listEventsForMap only returns events whose venue has status = ok, with lat/lng attached', async () => {
+    const soon = new Date(Date.now() + 21 * 24 * 3600 * 1000).toISOString()
+
+    const geocodedNorm = normalizeVenue('Mappable Venue Test')!
+    await upsertVenueGeocode({ cityId: 1, venueNorm: geocodedNorm, venueName: 'Mappable Venue Test', status: 'ok', lat: 30.3, lng: -97.7, formattedAddress: 'x' })
+    const mappedId = await insertEvent(
+      mk({ source: 'itest', source_id: 'map-geocoded-1', title: 'Mappable Venue Show', venue_name: 'Mappable Venue Test', start_time: soon }),
+      { cityId: 1, titleNorm: 'mappable venue show', venueNorm: geocodedNorm }
+    )
+
+    await insertEvent(
+      mk({ source: 'itest', source_id: 'map-ungeocoded-1', title: 'Unmappable Venue Show', venue_name: 'Unmappable Venue Test', start_time: soon }),
+      { cityId: 1, titleNorm: 'unmappable venue show', venueNorm: normalizeVenue('Unmappable Venue Test') }
+    )
+
+    const mapped = await listEventsForMap({ cityId: 1, limit: 1000 })
+    expect(mapped.some(e => e.id === mappedId)).toBe(true)
+    const mappedEvent = mapped.find(e => e.id === mappedId)!
+    expect(Number(mappedEvent.lat)).toBeCloseTo(30.3)
+    expect(Number(mappedEvent.lng)).toBeCloseTo(-97.7)
+
+    expect(mapped.some(e => e.source_id === 'map-ungeocoded-1')).toBe(false)
   })
 })
 

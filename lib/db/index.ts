@@ -24,6 +24,8 @@ export type City = {
   state: string
   timezone: string
   enabled: boolean
+  lat: number | null
+  lng: number | null
 }
 
 type EnrichedEvent = Record<string, unknown> & {
@@ -163,6 +165,62 @@ export async function countEvents(opts: {
     params
   )
   return parseInt(rows[0]?.count ?? '0', 10)
+}
+
+// ---------------------------------------------------------------------------
+// listEventsForMap — same filters as listEvents, minus pagination (the map
+// wants every matching pin at once), inner-joined against the venues geocode
+// cache so only events with a successfully geocoded venue come back.
+// ---------------------------------------------------------------------------
+export async function listEventsForMap(opts: {
+  cityId: number
+  q?: string
+  categories?: string[]
+  from?: string
+  to?: string
+  isFree?: boolean
+  limit: number
+}): Promise<EnrichedEvent[]> {
+  const db = await getDb()
+  const nowIso = new Date().toISOString()
+  const fromIso = opts.from && opts.from > nowIso ? opts.from : nowIso
+
+  const params: unknown[] = [fromIso]
+  let where = "e.start_time >= $1 AND e.status = 'approved'"
+
+  params.push(opts.cityId)
+  where += ` AND e.city_id = $${params.length}`
+
+  if (opts.to) {
+    params.push(opts.to)
+    where += ` AND e.start_time <= $${params.length}`
+  }
+  if (opts.isFree) {
+    where += ` AND e.is_free = true`
+  }
+  if (opts.q) {
+    params.push(opts.q)
+    where += ` AND ${FTS_MATCH.replace('$PARAM', `$${params.length}`)}`
+  }
+  if (opts.categories && opts.categories.length > 0) {
+    params.push(opts.categories)
+    where += ` AND e.id IN (
+      SELECT ec.event_id FROM event_categories ec
+      JOIN categories c ON c.id = ec.category_id
+      WHERE c.slug = ANY($${params.length}))`
+  }
+  params.push(opts.limit)
+
+  const rows = await db.query<Record<string, unknown>>(
+    `SELECT e.*, ${CATEGORIES_JSON}, v.lat, v.lng
+     FROM events e
+     JOIN venues v ON v.city_id = e.city_id AND v.venue_norm = e.venue_norm AND v.status = 'ok'
+     WHERE ${where}
+     ORDER BY e.start_time ASC
+     LIMIT $${params.length}`,
+    params
+  )
+  return rows.map(r => enrichRow(r, nowIso))
 }
 
 // ---------------------------------------------------------------------------
@@ -323,6 +381,90 @@ export async function getEventSources(
   )
 }
 
+// ---------------------------------------------------------------------------
+// Venue geocode cache (Phase 4: map view) — one row per unique (city_id,
+// venue_norm), populated once and never re-queried once cached. See
+// lib/geocode.ts's ensureVenueGeocoded for the cache-check/fetch/write flow.
+// ---------------------------------------------------------------------------
+export type VenueGeocode = {
+  city_id: number
+  venue_norm: string
+  venue_name: string
+  lat: number | null
+  lng: number | null
+  formatted_address: string | null
+  status: 'ok' | 'zero_results' | 'error'
+  used_address: boolean
+}
+
+export async function getVenueGeocode(cityId: number, venueNorm: string): Promise<VenueGeocode | null> {
+  const db = await getDb()
+  const rows = await db.query<VenueGeocode>(
+    `SELECT city_id, venue_norm, venue_name, lat, lng, formatted_address, status, used_address
+     FROM venues WHERE city_id = $1 AND venue_norm = $2`,
+    [cityId, venueNorm]
+  )
+  return rows[0] ?? null
+}
+
+// ON CONFLICT DO NOTHING: once a row exists it is never overwritten by this
+// function, so concurrent ingest + backfill writes for the same venue can't
+// clobber each other. A name-only ('usedAddress: false') result can later be
+// upgraded exactly once via upgradeVenueGeocode below.
+export async function upsertVenueGeocode(v: {
+  cityId: number
+  venueNorm: string
+  venueName: string
+  status: 'ok' | 'zero_results' | 'error'
+  lat?: number | null
+  lng?: number | null
+  formattedAddress?: string | null
+  usedAddress?: boolean
+}): Promise<void> {
+  const db = await getDb()
+  await db.query(
+    `INSERT INTO venues (city_id, venue_norm, venue_name, lat, lng, formatted_address, status, used_address)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+     ON CONFLICT (city_id, venue_norm) DO NOTHING`,
+    [v.cityId, v.venueNorm, v.venueName, v.lat ?? null, v.lng ?? null, v.formattedAddress ?? null, v.status, v.usedAddress ?? false]
+  )
+}
+
+// One-time upgrade: replaces a name-only geocode with a better address-based
+// result, once, the first time an address becomes available for this venue.
+// The `used_address = false` guard makes this idempotent under concurrent
+// ingest runs — a second concurrent upgrade attempt just no-ops since the
+// first one already flipped the flag.
+export async function upgradeVenueGeocode(
+  cityId: number, venueNorm: string,
+  result: { lat: number; lng: number; formattedAddress: string }
+): Promise<void> {
+  const db = await getDb()
+  await db.query(
+    `UPDATE venues SET lat = $3, lng = $4, formatted_address = $5, status = 'ok',
+       used_address = true, geocoded_at = NOW()
+     WHERE city_id = $1 AND venue_norm = $2 AND used_address = false`,
+    [cityId, venueNorm, result.lat, result.lng, result.formattedAddress]
+  )
+}
+
+// Distinct venues already present in `events`, for the one-off geocode
+// backfill (scripts/backfill-geocode.ts). Most-recently-updated event per
+// venue_norm wins the venue_name/venue_address tie-break.
+export async function getDistinctVenues(): Promise<{
+  city_id: number
+  venue_norm: string
+  venue_name: string
+  venue_address: string | null
+}[]> {
+  const db = await getDb()
+  return db.query(
+    `SELECT DISTINCT ON (city_id, venue_norm) city_id, venue_norm, venue_name, venue_address
+     FROM events WHERE venue_norm IS NOT NULL
+     ORDER BY city_id, venue_norm, updated_at DESC`
+  )
+}
+
 export async function setEventCategories(eventId: string, categoryIds: number[]): Promise<void> {
   if (categoryIds.length === 0) return
   const db = await getDb()
@@ -437,14 +579,14 @@ export async function touchSourceSuccess(id: number): Promise<void> {
 export async function getEnabledCities(): Promise<City[]> {
   const db = await getDb()
   return db.query<City>(
-    `SELECT id, slug, name, state, timezone, enabled FROM cities WHERE enabled = true ORDER BY id ASC`
+    `SELECT id, slug, name, state, timezone, enabled, lat, lng FROM cities WHERE enabled = true ORDER BY id ASC`
   )
 }
 
 export async function getCityBySlug(slug: string): Promise<City | null> {
   const db = await getDb()
   const rows = await db.query<City>(
-    `SELECT id, slug, name, state, timezone, enabled FROM cities WHERE slug = $1`,
+    `SELECT id, slug, name, state, timezone, enabled, lat, lng FROM cities WHERE slug = $1`,
     [slug]
   )
   return rows[0] ?? null
@@ -453,7 +595,7 @@ export async function getCityBySlug(slug: string): Promise<City | null> {
 export async function getCityById(id: number): Promise<City | null> {
   const db = await getDb()
   const rows = await db.query<City>(
-    `SELECT id, slug, name, state, timezone, enabled FROM cities WHERE id = $1`,
+    `SELECT id, slug, name, state, timezone, enabled, lat, lng FROM cities WHERE id = $1`,
     [id]
   )
   return rows[0] ?? null
