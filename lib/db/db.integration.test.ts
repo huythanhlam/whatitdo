@@ -280,6 +280,53 @@ describe('cross-source dedup via persistEvents', () => {
     const rows = await db.query(`SELECT event_id FROM event_sources WHERE source = 'crawl' AND external_id = 'idem-1'`)
     expect(rows).toHaveLength(1)
   })
+
+  it('getEventRow resolves source_kind via a join to the real sources.kind column', async () => {
+    // 'crawl:mohawkaustin-com' is a real Austin source seeded by migration 010
+    // (kind 'crawl'); getEventRow should surface that kind for mergeFields'
+    // sourceTrust() lookups instead of leaving it unresolved.
+    const e = mk({ source: 'crawl:mohawkaustin-com', source_id: 'kind-join-1', title: 'Kind Join Test Show', start_time: '2026-12-10T03:00:00Z' })
+    const id = await insertEvent(e, { cityId: 1, titleNorm: normalizeTitle(e.title, e.venue_name), venueNorm: normalizeVenue(e.venue_name) })
+    const row = await getEventRow(id)
+    expect(row?.source_kind).toBe('crawl')
+  })
+
+  it('getEventRow leaves source_kind null when the source name has no matching sources row', async () => {
+    const e = mk({ source: 'some-legacy-name-not-in-sources-table', source_id: 'kind-join-2', title: 'Kind Join Null Test', start_time: '2026-12-10T04:00:00Z' })
+    const id = await insertEvent(e, { cityId: 1, titleNorm: normalizeTitle(e.title, e.venue_name), venueNorm: normalizeVenue(e.venue_name) })
+    const row = await getEventRow(id)
+    expect(row?.source_kind ?? null).toBeNull()
+  })
+
+  it('an instance-named crawl source and the bare "crawl" name score at the SAME trust tier (regression guard)', async () => {
+    // Before the fix: sourceTrust() only recognized the literal 'crawl' key by
+    // name. 'crawl:mohawkaustin-com' (a real seeded instance, same kind) scored
+    // 0 — the lowest possible tier — purely because its exact name wasn't a
+    // static-map key, wrongly letting the later bare-name 'crawl' source (which
+    // WAS a recognized literal key, tier 1) steal the canonical title even
+    // though both are actually the same trust tier. getEventRow's sources join
+    // (existing side) plus RawEvent/registry kind-threading (incoming side)
+    // together close that gap; here we only need the existing-side join since
+    // the incoming raw event has no source_kind set and must fall back to the
+    // static map's 'crawl' entry to be equal-tier, exactly as a real un-kinded
+    // legacy caller would.
+    const a = mk({ source: 'crawl:mohawkaustin-com', source_id: 'tier-a', title: 'Residency Night', venue_name: 'Mohawk Tier Test Venue', start_time: '2026-12-11T03:00:00Z', ticket_url: 'http://mohawk' })
+    const b = mk({ source: 'crawl', source_id: 'tier-b', title: 'Residency Night Spam', venue_name: 'Mohawk Tier Test Venue', start_time: '2026-12-11T03:15:00Z', ticket_url: 'http://spam' })
+
+    await persistEvents([a])
+    await persistEvents([b])
+
+    const db = await getPgliteDb()
+    const canon = await db.query<{ title: string; ticket_url: string }>(
+      `SELECT title, ticket_url FROM events WHERE start_time BETWEEN '2026-12-11T02:00:00Z' AND '2026-12-11T05:00:00Z' AND venue_norm = $1`,
+      [normalizeVenue('Mohawk Tier Test Venue')]
+    )
+    expect(canon).toHaveLength(1)
+    // Equal trust tier → the first (canonical) event's title/ticket_url stand; the
+    // later same-tier arrival must NOT overwrite them.
+    expect(canon[0].title).toBe('Residency Night')
+    expect(canon[0].ticket_url).toBe('http://mohawk')
+  })
 })
 
 describe('sources table (migration 008)', () => {

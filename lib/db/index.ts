@@ -247,13 +247,23 @@ export async function insertEvent(
   return rows[0].id
 }
 
-// Fetch the mergeable columns of a canonical event for mergeFields().
+// Fetch the mergeable columns of a canonical event for mergeFields(). Joins
+// `sources` by name to resolve the event's CURRENT source's real `kind` (there
+// is no `source_kind` column on `events`) so sourceTrust() can rank
+// instance-named sources (e.g. 'crawl:mohawkaustin-com') correctly instead of
+// only recognizing its static map's literal names — see lib/dedup.ts.
+// `s.kind` is null when `e.source` has no matching `sources` row (legacy/ad-hoc
+// sources like 'seed'/'submission'/bare 'crawl' test fixtures), in which case
+// sourceTrust() falls back to its name-based map exactly as before.
 export async function getEventRow(id: string): Promise<ExistingEvent | null> {
   const db = await getDb()
   const rows = await db.query<ExistingEvent>(
-    `SELECT source, source_id, title, venue_norm, description, image_url,
-            venue_name, venue_address, end_time, ticket_url, is_free, price_min, price_max
-     FROM events WHERE id = $1`,
+    `SELECT e.source, e.source_id, e.title, e.venue_norm, e.description, e.image_url,
+            e.venue_name, e.venue_address, e.end_time, e.ticket_url, e.is_free,
+            e.price_min, e.price_max, s.kind AS source_kind
+     FROM events e
+     LEFT JOIN sources s ON s.name = e.source
+     WHERE e.id = $1`,
     [id]
   )
   return rows[0] ?? null

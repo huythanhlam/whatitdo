@@ -2,13 +2,13 @@ import { normalizeTitle, normalizeVenue } from './normalize'
 import type { RawEvent, SourceKind } from './sources/types'
 
 // Source-trust ranking for merge tiebreaks (PRODUCT-SPEC §2.2.3): api > ical >
-// jsonld > rss/crawl. Keyed by source *name*; kinds mirror the registry. Kept as a
-// small static map so the pure merge stays dependency-light and testable. Phase
-// 2B, which makes sources DB-driven, can replace this with a kind lookup.
-// Multi-city structured sources need their own literal key here (source *names*
-// are unique per row, e.g. 'ticketmaster:houston') until sourceTrust is rebuilt
-// on top of sources.kind directly — see the plan's scoping note on the
-// pre-existing crawl:*/newspaper:* instance-name gap, which this does not fix.
+// jsonld > rss/crawl. This is now a FALLBACK ONLY: real ingest (via
+// lib/sources/registry.ts's PARSERS dispatch) stamps every RawEvent with
+// `source_kind`, the authoritative `sources.kind` column for that instance, and
+// sourceTrust() prefers it over this map (see below). This map still matters
+// for callers that never flow through the registry and so never get a real
+// kind — 'seed' data, public 'submission's, and any bare-name test fixture —
+// plus it's what makes literal legacy names keep working unchanged.
 const KIND_BY_SOURCE: Record<string, SourceKind> = {
   ticketmaster: 'api',
   seatgeek: 'api',
@@ -27,9 +27,16 @@ const KIND_BY_SOURCE: Record<string, SourceKind> = {
 // rss sits at the crawl tier: newspaper RSS is Gemini-extracted, not structured.
 const TRUST_BY_KIND: Record<string, number> = { api: 4, ical: 3, jsonld: 2, rss: 1, crawl: 1, seed: 1 }
 
-export function sourceTrust(source: string): number {
-  const kind = KIND_BY_SOURCE[source]
-  return kind ? TRUST_BY_KIND[kind] ?? 0 : 0
+// `kind`, when given, is the authoritative `sources.kind` for this source
+// instance (threaded through RawEvent.source_kind / ExistingEvent.source_kind).
+// It takes priority over the name-based map so instance-named sources (e.g.
+// 'crawl:mohawkaustin-com', 'newspaper:kut') score at their real kind's tier
+// instead of falling through to 0 just because their exact name isn't a
+// literal key below. Falls back to the static map when no kind is available
+// (kind omitted/null), which keeps every existing caller working unchanged.
+export function sourceTrust(source: string, kind?: SourceKind | null): number {
+  const resolvedKind = kind ?? KIND_BY_SOURCE[source]
+  return resolvedKind ? TRUST_BY_KIND[resolvedKind] ?? 0 : 0
 }
 
 // A blocked candidate, scored in SQL: `sim` = pg_trgm similarity(title_norm),
@@ -52,6 +59,12 @@ export function chooseMatch(candidates: Candidate[]): string | null {
 export type ExistingEvent = {
   source: string
   source_id: string | null
+  // The real kind of the canonical event's CURRENT source, resolved by
+  // lib/db's getEventRow() via a join to `sources.name` (there is no
+  // `source_kind` column on `events` itself). Null when that source name has
+  // no matching `sources` row (legacy/ad-hoc sources) — sourceTrust() then
+  // falls back to its static map, same as for RawEvent.
+  source_kind?: SourceKind | null
   title: string
   venue_norm: string | null
   description: string | null
@@ -112,7 +125,7 @@ export function mergeFields(existing: ExistingEvent, incoming: RawEvent): FieldP
   if (incoming.is_free && !existing.is_free) patch.is_free = true
 
   // A more-trusted source owns the canonical title, ticket link, and primary source.
-  if (sourceTrust(incoming.source) > sourceTrust(existing.source)) {
+  if (sourceTrust(incoming.source, incoming.source_kind) > sourceTrust(existing.source, existing.source_kind)) {
     patch.source = incoming.source
     patch.source_id = incoming.source_id
     if (incoming.ticket_url) patch.ticket_url = incoming.ticket_url

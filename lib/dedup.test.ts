@@ -18,6 +18,33 @@ describe('sourceTrust', () => {
   it('puts public submissions at the same (lowest) trust tier as crawl', () => {
     expect(sourceTrust('submission')).toBe(sourceTrust('crawl'))
   })
+
+  it('falls back to 0 for an instance-named source with no kind given (the pre-fix bug)', () => {
+    // 'crawl:mohawkaustin-com' isn't a literal key in the static map, so with no
+    // kind info it scores as untrusted as pure garbage.
+    expect(sourceTrust('crawl:mohawkaustin-com')).toBe(0)
+  })
+
+  it('uses the real kind when given, ranking an instance-named crawl source at the crawl tier', () => {
+    expect(sourceTrust('crawl:mohawkaustin-com', 'crawl')).toBe(sourceTrust('crawl'))
+    expect(sourceTrust('crawl:mohawkaustin-com', 'crawl')).toBeGreaterThan(sourceTrust('crawl:mohawkaustin-com'))
+  })
+
+  it('uses the real kind for an instance-named rss/newspaper source', () => {
+    expect(sourceTrust('newspaper:kut', 'rss')).toBe(sourceTrust('newspapers'))
+    expect(sourceTrust('newspaper:kut')).toBe(0) // no kind given: not a literal key, no match
+  })
+
+  it('the real kind takes priority over the static map even when the name also has a literal entry', () => {
+    // 'crawl' literally maps to 'crawl' (tier 1) in the static map; an explicit
+    // 'api' kind should still win, proving kind isn't just an OR-fallback.
+    expect(sourceTrust('crawl', 'api')).toBe(sourceTrust('ticketmaster'))
+  })
+
+  it('a null kind (e.g. no matching sources row) falls back to the static map, same as omitting it', () => {
+    expect(sourceTrust('crawl', null)).toBe(sourceTrust('crawl'))
+    expect(sourceTrust('nope', null)).toBe(0)
+  })
 })
 
 describe('chooseMatch', () => {
@@ -73,6 +100,35 @@ describe('mergeFields', () => {
     const p = mergeFields({ ...base, source: 'ticketmaster', ticket_url: 'http://tm' }, { ...raw(), source: 'crawl', title: 'spam', ticket_url: 'http://spam' })
     expect(p?.title).toBeUndefined()
     expect(p?.ticket_url).toBeUndefined()
+  })
+  it('an instance-named crawl source with source_kind wins over an existing UNKNOWN-kind source', () => {
+    // Without source_kind info, base.source ('crawl') already resolves via the
+    // static map, but an existing event whose source has no static-map entry at
+    // all (simulating an un-joined/legacy row) previously scored 0 — any real
+    // kind should now correctly outrank it.
+    const unknownExisting = { ...base, source: 'crawl:some-random-unmapped-host', source_kind: null }
+    const p = mergeFields(unknownExisting, {
+      ...raw(), source: 'crawl:mohawkaustin-com', source_kind: 'crawl', title: 'Mohawk Show', ticket_url: 'http://mohawk',
+    })
+    expect(p).toMatchObject({ source: 'crawl:mohawkaustin-com', ticket_url: 'http://mohawk', title: 'Mohawk Show' })
+  })
+  it('two instance-named crawl sources at the same real kind tier do not swap title/ticket_url', () => {
+    // Both existing and incoming carry the authoritative 'crawl' kind, so they
+    // are equal trust — equal trust must not "win", matching same-tier behavior
+    // for literal names (regression guard for the existing/incoming symmetry).
+    const existingCrawl = { ...base, source: 'crawl:mohawkaustin-com', source_kind: 'crawl' as const, ticket_url: 'http://mohawk' }
+    const p = mergeFields(existingCrawl, {
+      ...raw(), source: 'crawl:theparishaustin-com', source_kind: 'crawl', title: 'spam', ticket_url: 'http://spam',
+    })
+    expect(p?.title).toBeUndefined()
+    expect(p?.ticket_url).toBeUndefined()
+  })
+  it('a structured source still outranks an instance-named crawl source even with real kind info', () => {
+    const existingCrawl = { ...base, source: 'crawl:mohawkaustin-com', source_kind: 'crawl' as const, ticket_url: 'http://mohawk' }
+    const p = mergeFields(existingCrawl, {
+      ...raw(), source: 'ticketmaster', source_kind: 'api', source_id: 'tm2', title: 'Canonical Title', ticket_url: 'http://tm',
+    })
+    expect(p).toMatchObject({ source: 'ticketmaster', ticket_url: 'http://tm', title: 'Canonical Title' })
   })
   it('returns null when nothing changes', () => {
     expect(mergeFields(base, { ...raw(), source: 'crawl', title: 'old', description: 'short' })).toBeNull()

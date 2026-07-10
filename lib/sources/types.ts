@@ -9,6 +9,13 @@ export type RawEvent = {
   ticket_url: string | null
   source: string
   source_id: string
+  // The authoritative kind of the `sources` row this event came from (its
+  // `kind` column), stamped on by lib/sources/registry.ts's PARSERS dispatch
+  // at fetch time. Optional/nullable because plenty of RawEvents never flow
+  // through the registry (seed data, public submissions, ad-hoc /api/import
+  // crawls, test fixtures) — sourceTrust() falls back to its static
+  // name-based map when this is absent, so omitting it is always safe.
+  source_kind?: SourceKind | null
   is_free: boolean
   price_min: number | null
   price_max: number | null
