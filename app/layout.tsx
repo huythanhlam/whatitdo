@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const TITLE = "What It Do — Local Events, Concerts & Things To Do";
+const TITLE = "Whats Happenin — Local Events, Concerts & Things To Do";
 const DESCRIPTION =
   "Discover things to do in your city: concerts, festivals, comedy, food & drink, arts, and more — aggregated daily and searchable by date and category.";
 
@@ -21,14 +21,14 @@ export const metadata: Metadata = {
   metadataBase: new URL(getBaseUrl()),
   title: {
     default: TITLE,
-    template: "%s · What It Do",
+    template: "%s · Whats Happenin",
   },
   description: DESCRIPTION,
-  applicationName: "What It Do",
+  applicationName: "Whats Happenin",
   openGraph: {
     title: TITLE,
     description: DESCRIPTION,
-    siteName: "What It Do",
+    siteName: "Whats Happenin",
     locale: "en_US",
     type: "website",
   },

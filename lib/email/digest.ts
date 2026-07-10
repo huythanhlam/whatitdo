@@ -8,7 +8,7 @@ const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KE
 
 // Verified sender for production; falls back to Resend's shared sandbox address
 // (which only delivers to the account owner) when EMAIL_FROM is unset.
-export const EMAIL_FROM = process.env.EMAIL_FROM ?? 'What It Do <onboarding@resend.dev>'
+export const EMAIL_FROM = process.env.EMAIL_FROM ?? 'Whats Happenin <onboarding@resend.dev>'
 
 export type DigestFrequency = 'daily' | 'weekly'
 
@@ -53,7 +53,7 @@ function buildDigestHtml(events: EventWithCats[], unsubscribeUrl: string, dateLa
 
   return `
     <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
-      <h1 style="color:#7c3aed;margin-bottom:4px">What It Do ${escapeHtml(cityName)}</h1>
+      <h1 style="color:#7c3aed;margin-bottom:4px">Whats Happenin ${escapeHtml(cityName)}</h1>
       <p style="color:#666;margin-bottom:8px">${escapeHtml(cityName)} events — ${escapeHtml(dateLabel)}</p>
       <hr style="border:none;border-top:1px solid #eee;margin-bottom:24px">
       ${eventHtml}
