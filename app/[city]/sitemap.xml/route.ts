@@ -15,12 +15,18 @@ import { SEO_PAGES } from '@/lib/seoPages'
 // A regular `route.ts` under the same `[city]` folder does get `{ params }`
 // like any other Route Handler, so we hand-roll the small bit of sitemap XML
 // serialization that the metadata convention would otherwise do for us.
-export const revalidate = 3600
-
-export async function generateStaticParams() {
-  const cities = await getEnabledCities()
-  return cities.map(c => ({ city: c.slug }))
-}
+//
+// Deliberately NOT statically generated: a `route.ts` nested one segment
+// below its own dynamic parent (`app/[city]/sitemap.xml/route.ts`) combined
+// with its own `generateStaticParams` is an unusual enough shape that it was
+// the leading suspect for a "failed to find source route ... for prerender"
+// build-time invariant seen on Vercel (not reproducible locally, including
+// from a fully isolated fresh checkout + install). Rendering this on-demand
+// removes that code path entirely; the explicit Cache-Control header below
+// already governs actual caching, so there is no behavior change for
+// visitors — only the "pre-built once at deploy time" optimization is lost,
+// which is immaterial for a low-traffic, cheap-to-compute sitemap.
+export const dynamic = 'force-dynamic'
 
 // Supports url/lastModified/changeFrequency/priority only — alternates/images/videos
 // from MetadataRoute.Sitemap are NOT implemented and will silently be dropped if used.
