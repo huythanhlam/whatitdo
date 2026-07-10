@@ -129,10 +129,19 @@ describe('getEventsBetween', () => {
 
 describe('source_runs ledger', () => {
   it('opens and closes a run, then surfaces it in recentSourceRuns', async () => {
-    const id = await startSourceRun('itest-source')
+    // recentSourceRuns is city-scoped via an inner join on sources.city_id, so
+    // this run needs a real source_id tied to a known city (Austin's seeded
+    // 'eventbrite' source, city id 1) to be attributable and visible.
+    const db = await getPgliteDb()
+    const austinSrc = (await db.query<{ id: number }>(
+      `SELECT id FROM sources WHERE name = 'eventbrite'`
+    ))[0]
+    expect(austinSrc).toBeTruthy()
+
+    const id = await startSourceRun('itest-source', austinSrc.id)
     await finishSourceRun(id, { status: 'ok', events_found: 3, events_upserted: 2, events_rejected: 1, gemini_requests: 4 })
 
-    const runs = await recentSourceRuns(5)
+    const runs = await recentSourceRuns(5, 1)
     const mine = runs.find(r => r.source === 'itest-source')
     expect(mine).toBeTruthy()
     expect(mine!.status).toBe('ok')
@@ -167,12 +176,6 @@ describe('recentSourceRuns city scoping', () => {
     const houstonOnly = await recentSourceRuns(10, 2)
     expect(houstonOnly.some(r => r.id === houstonRunId)).toBe(true)
     expect(houstonOnly.some(r => r.id === austinRunId)).toBe(false)
-
-    // Unscoped call (no cityId) preserves the existing global behavior and
-    // includes both, plus the NULL-source_id legacy run from the test above.
-    const all = await recentSourceRuns(10)
-    expect(all.some(r => r.id === austinRunId)).toBe(true)
-    expect(all.some(r => r.id === houstonRunId)).toBe(true)
   })
 })
 
