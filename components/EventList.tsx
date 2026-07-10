@@ -37,8 +37,8 @@ export function EventList({
   return (
     <div>
       <p className="text-sm text-muted-foreground mb-4">
-        Showing <span className="font-medium text-slate-700">{events.length}</span> of{' '}
-        <span className="font-medium text-slate-700">{total}</span> {total === 1 ? 'event' : 'events'}
+        Showing <span className="font-medium text-foreground">{events.length}</span> of{' '}
+        <span className="font-medium text-foreground">{total}</span> {total === 1 ? 'event' : 'events'}
       </p>
       <EventGrid events={events} basePath={basePath} />
       {!done && events.length > 0 && (
@@ -46,7 +46,7 @@ export function EventList({
           <button
             onClick={loadMore}
             disabled={loading}
-            className="px-6 py-2.5 rounded-full bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50 transition-colors"
+            className="px-6 py-2.5 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
           >
             {loading ? 'Loading…' : `Load more events (${total - events.length} more)`}
           </button>

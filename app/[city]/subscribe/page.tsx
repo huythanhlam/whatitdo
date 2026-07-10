@@ -43,9 +43,9 @@ export default async function SubscribePage({ params }: { params: Promise<{ city
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-white/95 sticky top-0 z-40">
+      <header className="border-b bg-card/95 sticky top-0 z-40">
         <div className="max-w-3xl mx-auto px-4 py-3">
-          <Link href={`/${city.slug}`} className="text-sm text-violet-600 hover:underline">← Back to events</Link>
+          <Link href={`/${city.slug}`} className="text-sm text-primary hover:underline">← Back to events</Link>
         </div>
       </header>
 

@@ -39,28 +39,28 @@ function buildDigestHtml(events: EventWithCats[], unsubscribeUrl: string, dateLa
     const image = safeUrl(e.image_url)
     const ticket = safeUrl(e.ticket_url)
     return `
-      <div style="border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:12px">
+      <div style="border:1px solid #F2E6D8;border-radius:8px;padding:16px;margin-bottom:12px">
         ${image ? `<img src="${image}" alt="" style="width:100%;height:120px;object-fit:cover;border-radius:4px;margin-bottom:12px">` : ''}
-        ${cats ? `<p style="font-size:11px;color:#7c3aed;margin:0 0 4px;text-transform:uppercase;letter-spacing:0.05em">${cats}</p>` : ''}
-        <h3 style="margin:0 0 6px;font-size:16px;color:#111">${escapeHtml(e.title)}</h3>
-        <p style="margin:0 0 4px;font-size:13px;color:#666">📅 ${escapeHtml(date)}</p>
-        ${e.venue_name ? `<p style="margin:0 0 8px;font-size:13px;color:#666">📍 ${escapeHtml(e.venue_name)}</p>` : ''}
-        ${priceLabel ? `<p style="margin:0 0 8px;font-size:13px;color:#16a34a">${priceLabel}</p>` : ''}
-        ${ticket ? `<a href="${ticket}" style="display:inline-block;background:#7c3aed;color:white;padding:8px 16px;border-radius:6px;text-decoration:none;font-size:13px">View event →</a>` : ''}
+        ${cats ? `<p style="font-size:11px;color:#C1502E;margin:0 0 4px;text-transform:uppercase;letter-spacing:0.05em">${cats}</p>` : ''}
+        <h3 style="margin:0 0 6px;font-size:16px;color:#2A1D15">${escapeHtml(e.title)}</h3>
+        <p style="margin:0 0 4px;font-size:13px;color:#6E5138">📅 ${escapeHtml(date)}</p>
+        ${e.venue_name ? `<p style="margin:0 0 8px;font-size:13px;color:#6E5138">📍 ${escapeHtml(e.venue_name)}</p>` : ''}
+        ${priceLabel ? `<p style="margin:0 0 8px;font-size:13px;color:#647353">${priceLabel}</p>` : ''}
+        ${ticket ? `<a href="${ticket}" style="display:inline-block;background:#C1502E;color:white;padding:8px 16px;border-radius:6px;text-decoration:none;font-size:13px">View event →</a>` : ''}
       </div>
     `
   }).join('')
 
   return `
     <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
-      <h1 style="color:#7c3aed;margin-bottom:4px">Whats Happenin ${escapeHtml(cityName)}</h1>
-      <p style="color:#666;margin-bottom:8px">${escapeHtml(cityName)} events — ${escapeHtml(dateLabel)}</p>
-      <hr style="border:none;border-top:1px solid #eee;margin-bottom:24px">
+      <h1 style="color:#C1502E;margin-bottom:4px">Whats Happenin ${escapeHtml(cityName)}</h1>
+      <p style="color:#6E5138;margin-bottom:8px">${escapeHtml(cityName)} events — ${escapeHtml(dateLabel)}</p>
+      <hr style="border:none;border-top:1px solid #F2E6D8;margin-bottom:24px">
       ${eventHtml}
-      ${events.length === 0 ? '<p style="color:#888;text-align:center">No events found for your filters.</p>' : ''}
-      <hr style="border:none;border-top:1px solid #eee;margin-top:24px">
-      <p style="margin-top:16px;font-size:12px;color:#aaa;text-align:center">
-        <a href="${escapeHtml(unsubscribeUrl)}" style="color:#aaa">Unsubscribe</a>
+      ${events.length === 0 ? '<p style="color:#8A6B4D;text-align:center">No events found for your filters.</p>' : ''}
+      <hr style="border:none;border-top:1px solid #F2E6D8;margin-top:24px">
+      <p style="margin-top:16px;font-size:12px;color:#A98866;text-align:center">
+        <a href="${escapeHtml(unsubscribeUrl)}" style="color:#A98866">Unsubscribe</a>
       </p>
     </div>
   `

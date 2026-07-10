@@ -20,13 +20,13 @@ export default function Error({
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="text-center max-w-md">
-        <h1 className="text-xl font-semibold text-slate-800 mb-2">Something went wrong</h1>
-        <p className="text-sm text-slate-500 mb-6">
+        <h1 className="text-xl font-semibold text-foreground mb-2">Something went wrong</h1>
+        <p className="text-sm text-muted-foreground mb-6">
           We couldn&apos;t load events right now. Please try again in a moment.
         </p>
         <button
           onClick={() => unstable_retry()}
-          className="text-sm bg-violet-600 text-white px-4 py-2 rounded-md hover:bg-violet-700 transition-colors font-medium"
+          className="text-sm bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90 transition-colors font-medium"
         >
           Try again
         </button>

@@ -1,15 +1,15 @@
 export const CATEGORIES = [
-  { slug: 'music',       name: 'Music',       color: '#7c3aed' },
-  { slug: 'comedy',      name: 'Comedy',      color: '#ea580c' },
-  { slug: 'food-drink',  name: 'Food & Drink',color: '#16a34a' },
-  { slug: 'arts',        name: 'Arts',        color: '#0284c7' },
-  { slug: 'sports',      name: 'Sports',      color: '#dc2626' },
-  { slug: 'family',      name: 'Family',      color: '#d97706' },
-  { slug: 'festivals',   name: 'Festivals',   color: '#db2777' },
-  { slug: 'film',        name: 'Film',        color: '#475569' },
-  { slug: 'outdoors',    name: 'Outdoors',    color: '#15803d' },
-  { slug: 'networking',  name: 'Networking',  color: '#6d28d9' },
-  { slug: 'other',       name: 'Other',       color: '#71717a' },
+  { slug: 'music',       name: 'Music',       color: '#C1502E' },
+  { slug: 'comedy',      name: 'Comedy',      color: '#E8823C' },
+  { slug: 'food-drink',  name: 'Food & Drink',color: '#7C8F63' },
+  { slug: 'arts',        name: 'Arts',        color: '#2C5F9E' },
+  { slug: 'sports',      name: 'Sports',      color: '#9C3B2E' },
+  { slug: 'family',      name: 'Family',      color: '#2A9D96' },
+  { slug: 'festivals',   name: 'Festivals',   color: '#8A3B57' },
+  { slug: 'film',        name: 'Film',        color: '#573F2C' },
+  { slug: 'outdoors',    name: 'Outdoors',    color: '#4F5B41' },
+  { slug: 'networking',  name: 'Networking',  color: '#1C3D66' },
+  { slug: 'other',       name: 'Other',       color: '#A98866' },
 ] as const
 
 export type CategorySlug = typeof CATEGORIES[number]['slug']

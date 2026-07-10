@@ -41,7 +41,7 @@ export function SidebarFilters({ compact = false }: { compact?: boolean }) {
               key={cat.slug}
               onClick={() => toggle(cat.slug)}
               className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap border transition-colors flex items-center gap-1.5 ${
-                on ? 'text-white border-transparent' : 'bg-white text-slate-600 border-slate-200'
+                on ? 'text-white border-transparent' : 'bg-background text-muted-foreground border-border'
               }`}
               style={on ? { backgroundColor: cat.color } : undefined}
             >
@@ -59,7 +59,7 @@ export function SidebarFilters({ compact = false }: { compact?: boolean }) {
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-sm">Categories</h2>
         {selected.length > 0 && (
-          <button onClick={clearAll} className="text-xs text-violet-600 hover:underline">
+          <button onClick={clearAll} className="text-xs text-primary hover:underline">
             Clear
           </button>
         )}

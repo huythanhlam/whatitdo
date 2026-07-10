@@ -155,25 +155,25 @@ export default async function CityHomePage({
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b sticky top-0 z-40 bg-white/95 backdrop-blur-sm shadow-sm">
+      <header className="border-b sticky top-0 z-40 bg-card/95 backdrop-blur-sm shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-4">
-          <Link href={base} className="font-bold text-lg text-violet-600 shrink-0 whitespace-nowrap">
+          <Link href={base} className="font-bold text-lg text-primary shrink-0 whitespace-nowrap">
             🎉 Whats Happenin {city.name}
           </Link>
           <div className="flex-1 max-w-xl">
-            <Suspense fallback={<div className="h-9 bg-slate-100 rounded-md animate-pulse" />}>
+            <Suspense fallback={<div className="h-9 bg-muted rounded-md animate-pulse" />}>
               <SearchBar />
             </Suspense>
           </div>
           <Link
             href={`${base}/submit`}
-            className="shrink-0 text-sm text-slate-600 hover:text-violet-700 font-medium hidden sm:inline"
+            className="shrink-0 text-sm text-muted-foreground hover:text-primary font-medium hidden sm:inline"
           >
             Submit an event
           </Link>
           <Link
             href={`${base}/subscribe`}
-            className="shrink-0 text-sm bg-violet-600 text-white px-3 py-1.5 rounded-md hover:bg-violet-700 transition-colors font-medium"
+            className="shrink-0 text-sm bg-primary text-primary-foreground px-3 py-1.5 rounded-md hover:bg-primary/90 transition-colors font-medium"
           >
             Get Updates
           </Link>
@@ -189,15 +189,15 @@ export default async function CityHomePage({
 
         <main className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-3 mb-4">
-            <h1 className="text-lg font-semibold text-slate-800">{city.name} Events</h1>
-            <Suspense fallback={<div className="h-9 w-32 bg-slate-100 rounded-lg animate-pulse" />}>
+            <h1 className="text-lg font-semibold text-foreground">{city.name} Events</h1>
+            <Suspense fallback={<div className="h-9 w-32 bg-muted rounded-lg animate-pulse" />}>
               <ViewToggle />
             </Suspense>
           </div>
 
           <div className="flex flex-wrap gap-3 mb-4 text-xs">
             {SEO_PAGES.map(p => (
-              <Link key={p.slug} href={`${base}/${p.slug}`} className="text-violet-600 hover:underline">
+              <Link key={p.slug} href={`${base}/${p.slug}`} className="text-primary hover:underline">
                 {p.title}
               </Link>
             ))}
@@ -211,27 +211,27 @@ export default async function CityHomePage({
           </div>
 
           {view === 'calendar' ? (
-            <Suspense fallback={<div className="h-96 bg-slate-100 rounded-lg animate-pulse" />}>
+            <Suspense fallback={<div className="h-96 bg-muted rounded-lg animate-pulse" />}>
               <CalendarLoader city={city} searchParams={sp} />
             </Suspense>
           ) : view === 'map' ? (
             <>
-              <Suspense fallback={<div className="h-9 bg-slate-100 rounded-md animate-pulse mb-5" />}>
+              <Suspense fallback={<div className="h-9 bg-muted rounded-md animate-pulse mb-5" />}>
                 <DateFilter />
               </Suspense>
-              <Suspense fallback={<div className="h-[600px] bg-slate-100 rounded-lg animate-pulse" />}>
+              <Suspense fallback={<div className="h-[600px] bg-muted rounded-lg animate-pulse" />}>
                 <MapLoader city={city} searchParams={sp} />
               </Suspense>
             </>
           ) : (
             <>
-              <Suspense fallback={<div className="h-9 bg-slate-100 rounded-md animate-pulse mb-5" />}>
+              <Suspense fallback={<div className="h-9 bg-muted rounded-md animate-pulse mb-5" />}>
                 <DateFilter />
               </Suspense>
               <Suspense fallback={
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {Array(6).fill(0).map((_, i) => (
-                    <div key={i} className="h-64 bg-slate-100 rounded-xl animate-pulse" />
+                    <div key={i} className="h-64 bg-muted rounded-xl animate-pulse" />
                   ))}
                 </div>
               }>
