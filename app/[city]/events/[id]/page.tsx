@@ -4,7 +4,7 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { getEvent as fetchEvent } from '@/lib/db'
+import { getEvent as fetchEvent, getCityBySlug } from '@/lib/db'
 import { requireCity } from '@/lib/cities'
 import { getTicketProvider } from '@/lib/tickets'
 import { getBaseUrl } from '@/lib/site'
@@ -21,9 +21,12 @@ export async function generateMetadata({
 }: {
   params: Promise<{ city: string; id: string }>
 }): Promise<Metadata> {
-  const { id } = await params
-  const event = (await fetchEvent(id)) as unknown as EnrichedEvent | null
-  if (!event) return { title: 'Event not found' }
+  const { city: citySlug, id } = await params
+  const [event, city] = await Promise.all([
+    fetchEvent(id) as unknown as Promise<EnrichedEvent | null>,
+    getCityBySlug(citySlug),
+  ])
+  if (!event || !city || event.city_id !== city.id) return { title: 'Event not found' }
 
   const date = new Date(event.start_time).toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
@@ -35,7 +38,7 @@ export async function generateMetadata({
   return {
     title: event.title,
     description,
-    alternates: { canonical: `/${(await params).city}/events/${event.id}` },
+    alternates: { canonical: `/${citySlug}/events/${event.id}` },
     openGraph: { title: event.title, description, type: 'article', images },
     twitter: { card: 'summary_large_image', title: event.title, description, images },
   }
