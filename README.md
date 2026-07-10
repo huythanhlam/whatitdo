@@ -5,8 +5,8 @@ currently live for **Austin** and **Houston** under `/[city]/` routing (`/`
 redirects to the first enabled city). It ingests events daily from many
 sources (Eventbrite, City iCal, Ticketmaster/SeatGeek, local newspaper RSS,
 social, YouTube, and a Gemini-powered page crawler), tags and de-dupes them,
-and serves a filterable/searchable grid + calendar with email digests and paid
-featured listings.
+and serves a filterable/searchable grid + calendar with personalized email
+digests and paid featured listings.
 
 **It runs with zero credentials** — no accounts, no keys — thanks to an embedded
 in-memory Postgres (PGlite) seeded with real Austin events.
@@ -73,6 +73,21 @@ which also shows per-source health. It's gated by the same `CRON_SECRET`
 bearer token as the other admin/cron endpoints (paste any string into the
 token field in dev — auth is open outside production; in production paste the
 real `CRON_SECRET`, stored in the browser's local storage).
+
+### Personalized email digests
+
+Subscribe at `/[city]/subscribe` (e.g.
+[http://localhost:3000/austin/subscribe](http://localhost:3000/austin/subscribe))
+for a daily or weekly digest, filterable by category, a free-events-only
+toggle, and (once venues are geocoded — see `GOOGLE_GEOCODING_API_KEY` below)
+neighborhood. Subscriptions use double opt-in: the welcome email links to a
+confirm page, and unconfirmed subscriptions never receive digests.
+
+```bash
+curl -X POST http://localhost:3000/api/subscribe \
+  -H 'content-type: application/json' \
+  -d '{"email":"you@example.com","frequency":"daily","category_slugs":["music"],"free_only":true,"city":"austin"}'
+```
 
 ## Scripts
 

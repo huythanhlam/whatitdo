@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import { CATEGORY_SLUGS } from '@/lib/categories'
-import { addSubscription, getCityBySlug } from '@/lib/db'
+import { addSubscription, getCityBySlug, getDistinctNeighborhoods } from '@/lib/db'
 import { escapeHtml } from '@/lib/html'
 import { getBaseUrl } from '@/lib/site'
 import { EMAIL_FROM } from '@/lib/email/digest'
@@ -9,7 +9,7 @@ import { EMAIL_FROM } from '@/lib/email/digest'
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
 
 export async function POST(req: NextRequest) {
-  let body: { email?: unknown; frequency?: unknown; category_slugs?: unknown; city?: unknown }
+  let body: { email?: unknown; frequency?: unknown; category_slugs?: unknown; city?: unknown; free_only?: unknown; neighborhoods?: unknown }
   try {
     body = await req.json()
   } catch {
@@ -20,6 +20,8 @@ export async function POST(req: NextRequest) {
   const frequency = body.frequency === 'weekly' ? 'weekly' : 'daily'
   const rawSlugs = Array.isArray(body.category_slugs) ? body.category_slugs : []
   const citySlug = typeof body.city === 'string' ? body.city.trim() : ''
+  const freeOnly = body.free_only === true
+  const rawNeighborhoods = Array.isArray(body.neighborhoods) ? body.neighborhoods : []
 
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return NextResponse.json({ error: 'Invalid email' }, { status: 400 })
@@ -31,11 +33,22 @@ export async function POST(req: NextRequest) {
   const validSlugs = rawSlugs.filter((s: unknown): s is string =>
     typeof s === 'string' && (CATEGORY_SLUGS as string[]).includes(s))
 
-  const token = await addSubscription({ email, frequency, category_slugs: validSlugs, cityId: city.id })
+  // Validate against the city's real neighborhoods (dynamic, unlike the fixed
+  // category list) so a subscription can't accumulate junk that will never
+  // match any event.
+  const knownNeighborhoods = await getDistinctNeighborhoods(city.id)
+  const validNeighborhoods = rawNeighborhoods.filter((n: unknown): n is string =>
+    typeof n === 'string' && knownNeighborhoods.includes(n))
+
+  const token = await addSubscription({
+    email, frequency, category_slugs: validSlugs, cityId: city.id,
+    freeOnly, neighborhoods: validNeighborhoods,
+  })
   if (!token) {
     return NextResponse.json({ error: 'Could not save subscription' }, { status: 500 })
   }
 
+  const confirmUrl = `${getBaseUrl()}/api/subscribe/confirm?token=${token}`
   const unsubscribeUrl = `${getBaseUrl()}/api/unsubscribe?token=${token}`
   const categoryLabel = validSlugs.length ? validSlugs.join(', ') : 'all categories'
 
@@ -43,14 +56,15 @@ export async function POST(req: NextRequest) {
     await resend?.emails.send({
       from: EMAIL_FROM,
       to: email,
-      subject: `You're subscribed to ${city.name} events!`,
+      subject: `Confirm your ${city.name} events subscription`,
       html: `
         <div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px">
-          <h2 style="color:#7c3aed">You're in! 🎉</h2>
+          <h2 style="color:#7c3aed">Almost there! 🎉</h2>
           <p>You signed up for <strong>${escapeHtml(frequency)}</strong> ${escapeHtml(city.name)} events updates for: <strong>${escapeHtml(categoryLabel)}</strong>.</p>
-          <p>Your first digest will arrive soon.</p>
+          <p>Confirm your email to start receiving digests:</p>
+          <p><a href="${escapeHtml(confirmUrl)}" style="display:inline-block;background:#7c3aed;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:14px">Confirm subscription</a></p>
           <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
-          <p style="font-size:12px;color:#888"><a href="${escapeHtml(unsubscribeUrl)}" style="color:#888">Unsubscribe</a></p>
+          <p style="font-size:12px;color:#888">Didn't sign up? <a href="${escapeHtml(unsubscribeUrl)}" style="color:#888">Unsubscribe</a></p>
         </div>
       `,
       headers: {

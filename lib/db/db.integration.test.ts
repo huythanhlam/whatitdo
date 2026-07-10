@@ -7,6 +7,7 @@ import {
   addSubscription,
   listSubscriptions,
   removeSubscription,
+  confirmSubscription,
   getEventsBetween,
   startSourceRun,
   finishSourceRun,
@@ -30,6 +31,7 @@ import {
   upsertVenueGeocode,
   upgradeVenueGeocode,
   getDistinctVenues,
+  getDistinctNeighborhoods,
   listEventsForMap,
 } from './index'
 import { persistEvents } from '@/lib/persist'
@@ -107,16 +109,41 @@ describe('persistEvents opts defaulting', () => {
 })
 
 describe('subscription lifecycle against PGlite', () => {
-  it('adds, lists, and removes a subscription (token from DB default)', async () => {
+  it('adds a subscription, hides it from listSubscriptions until confirmed, then lists and removes it', async () => {
     const token = await addSubscription({ email: 'itest@example.com', frequency: 'weekly', category_slugs: ['music'], cityId: 1 })
     expect(token).toBeTruthy()
 
+    // Double opt-in (Phase 5): an unconfirmed subscription never receives digests.
+    const beforeConfirm = await listSubscriptions('weekly', 1)
+    expect(beforeConfirm.some(s => s.email === 'itest@example.com')).toBe(false)
+
+    await confirmSubscription(token!)
     const subs = await listSubscriptions('weekly', 1)
     expect(subs.some(s => s.email === 'itest@example.com')).toBe(true)
 
     await removeSubscription(token!)
     const after = await listSubscriptions('weekly', 1)
     expect(after.some(s => s.email === 'itest@example.com')).toBe(false)
+  })
+
+  it('persists free_only and neighborhoods, and re-subscribing does not reset confirmed', async () => {
+    const token = await addSubscription({
+      email: 'personalized@example.com', frequency: 'daily', category_slugs: [], cityId: 1,
+      freeOnly: true, neighborhoods: ['Zilker', 'Downtown'],
+    })
+    await confirmSubscription(token!)
+
+    const [sub] = await listSubscriptions('daily', 1)
+    expect(sub).toMatchObject({ email: 'personalized@example.com', free_only: true, neighborhoods: ['Zilker', 'Downtown'] })
+
+    // Re-subscribing (same email + city) updates preferences but keeps confirmed.
+    await addSubscription({ email: 'personalized@example.com', frequency: 'daily', category_slugs: ['music'], cityId: 1 })
+    const [resubbed] = await listSubscriptions('daily', 1)
+    expect(resubbed).toMatchObject({ category_slugs: ['music'], free_only: false, neighborhoods: [] })
+  })
+
+  it('confirmSubscription is a silent no-op for an unknown token', async () => {
+    await expect(confirmSubscription('not-a-real-token')).resolves.toBeUndefined()
   })
 })
 
@@ -602,11 +629,12 @@ describe('venue geocode cache (Phase 4 map view)', () => {
     const venueNorm = normalizeVenue('Upgrade Geocode Venue')!
     await upsertVenueGeocode({ cityId: 1, venueNorm, venueName: 'Upgrade Geocode Venue', status: 'ok', lat: 1, lng: 1, formattedAddress: 'coarse' })
 
-    await upgradeVenueGeocode(1, venueNorm, { lat: 30.5, lng: -97.5, formattedAddress: '456 Precise St, Austin, TX' })
+    await upgradeVenueGeocode(1, venueNorm, { lat: 30.5, lng: -97.5, formattedAddress: '456 Precise St, Austin, TX', neighborhood: 'East Austin' })
 
     const row = await getVenueGeocode(1, venueNorm)
     expect(row!.used_address).toBe(true)
     expect(row!.formatted_address).toBe('456 Precise St, Austin, TX')
+    expect(row!.neighborhood).toBe('East Austin')
     expect(Number(row!.lat)).toBeCloseTo(30.5)
   })
 
@@ -614,10 +642,36 @@ describe('venue geocode cache (Phase 4 map view)', () => {
     const venueNorm = normalizeVenue('Already Upgraded Venue')!
     await upsertVenueGeocode({ cityId: 1, venueNorm, venueName: 'Already Upgraded Venue', status: 'ok', lat: 1, lng: 1, formattedAddress: 'first-address', usedAddress: true })
 
-    await upgradeVenueGeocode(1, venueNorm, { lat: 99, lng: 99, formattedAddress: 'second-address' })
+    await upgradeVenueGeocode(1, venueNorm, { lat: 99, lng: 99, formattedAddress: 'second-address', neighborhood: 'Somewhere Else' })
 
     const row = await getVenueGeocode(1, venueNorm)
     expect(row!.formatted_address).toBe('first-address')
+  })
+
+  it('upsertVenueGeocode + getVenueGeocode round-trips a neighborhood', async () => {
+    const venueNorm = normalizeVenue('Neighborhood Roundtrip Venue')!
+    await upsertVenueGeocode({
+      cityId: 1, venueNorm, venueName: 'Neighborhood Roundtrip Venue',
+      status: 'ok', lat: 30.27, lng: -97.74, formattedAddress: 'x', neighborhood: 'Downtown',
+    })
+    const row = await getVenueGeocode(1, venueNorm)
+    expect(row!.neighborhood).toBe('Downtown')
+  })
+
+  it('getDistinctNeighborhoods returns only ok-status, non-null neighborhoods for the given city', async () => {
+    const a = normalizeVenue('Distinct Neighborhood Venue A')!
+    const b = normalizeVenue('Distinct Neighborhood Venue B')!
+    const c = normalizeVenue('Distinct Neighborhood Venue C')!
+    await upsertVenueGeocode({ cityId: 1, venueNorm: a, venueName: 'A', status: 'ok', lat: 1, lng: 1, formattedAddress: 'x', neighborhood: 'Zilker' })
+    await upsertVenueGeocode({ cityId: 1, venueNorm: b, venueName: 'B', status: 'ok', lat: 1, lng: 1, formattedAddress: 'x', neighborhood: null })
+    await upsertVenueGeocode({ cityId: 1, venueNorm: c, venueName: 'C', status: 'zero_results', neighborhood: 'Should Not Appear' })
+
+    const neighborhoods = await getDistinctNeighborhoods(1)
+    expect(neighborhoods).toContain('Zilker')
+    expect(neighborhoods).not.toContain('Should Not Appear')
+
+    const houstonNeighborhoods = await getDistinctNeighborhoods(2)
+    expect(houstonNeighborhoods).not.toContain('Zilker')
   })
 
   it('getDistinctVenues returns distinct (city_id, venue_norm) pairs from events', async () => {

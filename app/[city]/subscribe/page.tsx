@@ -2,6 +2,7 @@ import Link from 'next/link'
 import type { Metadata } from 'next'
 import { SubscribeForm } from '@/components/SubscribeForm'
 import { requireCity } from '@/lib/cities'
+import { getDistinctNeighborhoods } from '@/lib/db'
 
 export async function generateMetadata({
   params,
@@ -38,6 +39,7 @@ export async function generateMetadata({
 export default async function SubscribePage({ params }: { params: Promise<{ city: string }> }) {
   const { city: citySlug } = await params
   const city = await requireCity(citySlug)
+  const neighborhoods = await getDistinctNeighborhoods(city.id)
 
   return (
     <div className="min-h-screen bg-background">
@@ -57,7 +59,7 @@ export default async function SubscribePage({ params }: { params: Promise<{ city
               No spam — ever.
             </p>
           </div>
-          <SubscribeForm />
+          <SubscribeForm neighborhoods={neighborhoods} />
         </div>
       </div>
     </div>
