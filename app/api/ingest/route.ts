@@ -75,11 +75,21 @@ async function runSource(source: SourceRow, city: City): Promise<{ upserted: num
   }
 }
 
-async function runIngest() {
+// Optional `?city=<slug>` scopes a run to one city (see vercel.json — each
+// enabled city gets its own cron entry, staggered, so one invocation's
+// maxDuration/Gemini-RPM budget is never shared across cities). Omitting it
+// preserves the original all-cities-in-one-run behavior for local/manual
+// triggering (README's `curl -X POST /api/ingest`) and as a fallback.
+async function runIngest(cityFilter?: string) {
   // Ingestion is driven entirely by the `sources` table (Phase 2B), looped over
   // every enabled city (Phase 3): enabled rows for each city, each dispatched to
   // its parser mechanism. Adding coverage is an INSERT, not a code change.
-  const cities = await getEnabledCities()
+  const enabledCities = await getEnabledCities()
+  const cities = cityFilter ? enabledCities.filter(c => c.slug === cityFilter) : enabledCities
+
+  if (cityFilter && cities.length === 0) {
+    return NextResponse.json({ error: `Unknown or disabled city "${cityFilter}"` }, { status: 400 })
+  }
 
   const perCity = await Promise.all(cities.map(async city => {
     const sources = await getEnabledSources(city.id)
@@ -108,7 +118,7 @@ async function runIngest() {
 export async function POST(req: NextRequest) {
   const denied = requireCronAuth(req)
   if (denied) return denied
-  return runIngest()
+  return runIngest(req.nextUrl.searchParams.get('city') ?? undefined)
 }
 
 // Vercel Cron invokes scheduled jobs with a GET request (carrying the
@@ -116,5 +126,5 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const denied = requireCronAuth(req)
   if (denied) return denied
-  return runIngest()
+  return runIngest(req.nextUrl.searchParams.get('city') ?? undefined)
 }

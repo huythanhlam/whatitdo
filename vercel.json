@@ -1,8 +1,12 @@
 {
   "crons": [
     {
-      "path": "/api/ingest",
+      "path": "/api/ingest?city=austin",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/ingest?city=houston",
+      "schedule": "15 6 * * *"
     },
     {
       "path": "/api/email/digest?frequency=daily",
