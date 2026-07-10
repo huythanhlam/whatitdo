@@ -1,0 +1,17 @@
+{
+  "status": "OK",
+  "results": [
+    {
+      "formatted_address": "1500 W 6th St, Austin, TX 78703, USA",
+      "geometry": {
+        "location": { "lat": 30.2711, "lng": -97.7597 }
+      },
+      "address_components": [
+        { "long_name": "1500", "short_name": "1500", "types": ["street_number"] },
+        { "long_name": "West 6th Street", "short_name": "W 6th St", "types": ["route"] },
+        { "long_name": "Austin", "short_name": "Austin", "types": ["locality", "political"] },
+        { "long_name": "Texas", "short_name": "TX", "types": ["administrative_area_level_1", "political"] }
+      ]
+    }
+  ]
+}

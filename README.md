@@ -5,8 +5,8 @@ currently live for **Austin** and **Houston** under `/[city]/` routing (`/`
 redirects to the first enabled city). It ingests events daily from many
 sources (Eventbrite, City iCal, Ticketmaster/SeatGeek, local newspaper RSS,
 social, YouTube, and a Gemini-powered page crawler), tags and de-dupes them,
-and serves a filterable/searchable grid + calendar with email digests and paid
-featured listings.
+and serves a filterable/searchable grid + calendar with personalized email
+digests and paid featured listings.
 
 **It runs with zero credentials** — no accounts, no keys — thanks to an embedded
 in-memory Postgres (PGlite) seeded with real Austin events.
@@ -74,6 +74,21 @@ bearer token as the other admin/cron endpoints (paste any string into the
 token field in dev — auth is open outside production; in production paste the
 real `CRON_SECRET`, stored in the browser's local storage).
 
+### Personalized email digests
+
+Subscribe at `/[city]/subscribe` (e.g.
+[http://localhost:3000/austin/subscribe](http://localhost:3000/austin/subscribe))
+for a daily or weekly digest, filterable by category, a free-events-only
+toggle, and (once venues are geocoded — see `GOOGLE_GEOCODING_API_KEY` below)
+neighborhood. Subscriptions use double opt-in: the welcome email links to a
+confirm page, and unconfirmed subscriptions never receive digests.
+
+```bash
+curl -X POST http://localhost:3000/api/subscribe \
+  -H 'content-type: application/json' \
+  -d '{"email":"you@example.com","frequency":"daily","category_slugs":["music"],"free_only":true,"city":"austin"}'
+```
+
 ## Scripts
 
 | Command | What it does |
@@ -89,8 +104,11 @@ real `CRON_SECRET`, stored in the browser's local storage).
 ### 1. Database (required)
 
 1. Create a project at [supabase.com/dashboard](https://supabase.com/dashboard) (free tier is fine).
-2. **Settings → Database → Connection pooling** → copy the **URI** (the Supavisor
-   pooler string) → set it as `DATABASE_URL` in `.env.local`.
+2. **Settings → Database → Connection pooling → "Transaction" tab** → copy the
+   **URI** (port `6543`) → set it as `DATABASE_URL` in `.env.local`. Use the
+   Transaction pooler, not Session (port `5432`) — the app opens a `pg` Pool
+   per serverless instance, and Session mode's low client cap gets exhausted
+   by ordinary traffic ("max clients reached in session mode").
 3. Apply the schema:
 
    ```bash

@@ -5,7 +5,14 @@
       "formatted_address": "912 Red River St, Austin, TX 78701, USA",
       "geometry": {
         "location": { "lat": 30.267985, "lng": -97.7381 }
-      }
+      },
+      "address_components": [
+        { "long_name": "912", "short_name": "912", "types": ["street_number"] },
+        { "long_name": "Red River Street", "short_name": "Red River St", "types": ["route"] },
+        { "long_name": "Downtown", "short_name": "Downtown", "types": ["neighborhood", "political"] },
+        { "long_name": "Austin", "short_name": "Austin", "types": ["locality", "political"] },
+        { "long_name": "Texas", "short_name": "TX", "types": ["administrative_area_level_1", "political"] }
+      ]
     }
   ]
 }

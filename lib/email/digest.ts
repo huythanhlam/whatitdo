@@ -12,7 +12,22 @@ export const EMAIL_FROM = process.env.EMAIL_FROM ?? 'What It Do <onboarding@rese
 
 export type DigestFrequency = 'daily' | 'weekly'
 
-type EventWithCats = Event & { categories?: Category[] }
+type EventWithCats = Event & { categories?: Category[]; neighborhood?: string | null }
+
+// Applies a subscriber's category/free-only/neighborhood preferences, in that
+// order, to the city's event window. Each filter is a no-op when the
+// subscriber left it unset (empty categories/neighborhoods, free_only false).
+export function filterEventsForSubscriber(
+  events: EventWithCats[],
+  sub: { category_slugs: string[]; free_only: boolean; neighborhoods: string[] }
+): EventWithCats[] {
+  let filtered = sub.category_slugs?.length
+    ? events.filter(e => e.categories?.some(c => sub.category_slugs.includes(c.slug)))
+    : events
+  if (sub.free_only) filtered = filtered.filter(e => e.is_free)
+  if (sub.neighborhoods?.length) filtered = filtered.filter(e => e.neighborhood && sub.neighborhoods.includes(e.neighborhood))
+  return filtered
+}
 
 function buildDigestHtml(events: EventWithCats[], unsubscribeUrl: string, dateLabel: string, cityName: string): string {
   const eventHtml = events.slice(0, 12).map(e => {
@@ -76,9 +91,7 @@ export async function sendDigests(frequency: DigestFrequency, cityId: number) {
   let sent = 0
 
   for (const sub of subs) {
-    const filtered = sub.category_slugs?.length
-      ? events.filter(e => e.categories?.some(c => sub.category_slugs.includes(c.slug)))
-      : events
+    const filtered = filterEventsForSubscriber(events, sub)
 
     // Unsubscribe is a POST (RFC 8058 one-click); the token travels in the query.
     const unsubscribeUrl = `${baseUrl}/api/unsubscribe?token=${sub.token}`
