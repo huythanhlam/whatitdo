@@ -1,5 +1,6 @@
 'use client'
 import { useState } from 'react'
+import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -7,6 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { CATEGORIES } from '@/lib/categories'
 
 export function SubscribeForm() {
+  const { city } = useParams<{ city: string }>()
   const [email, setEmail] = useState('')
   const [frequency, setFrequency] = useState<'daily' | 'weekly'>('daily')
   const [selected, setSelected] = useState<string[]>([])
@@ -23,7 +25,7 @@ export function SubscribeForm() {
       const res = await fetch('/api/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, frequency, category_slugs: selected }),
+        body: JSON.stringify({ email, frequency, category_slugs: selected, city }),
       })
       setStatus(res.ok ? 'success' : 'error')
     } catch {
@@ -37,7 +39,7 @@ export function SubscribeForm() {
         <p className="text-5xl">🎉</p>
         <h2 className="text-xl font-bold">You&apos;re subscribed!</h2>
         <p className="text-sm text-muted-foreground">Check your inbox — first digest arrives tomorrow morning.</p>
-        <Link href="/" className="block mt-4 text-sm text-violet-600 hover:underline">Browse events now →</Link>
+        <Link href={`/${city}`} className="block mt-4 text-sm text-violet-600 hover:underline">Browse events now →</Link>
       </div>
     )
   }
@@ -104,7 +106,7 @@ export function SubscribeForm() {
         disabled={status === 'loading'}
         className="w-full bg-violet-600 hover:bg-violet-700 text-white"
       >
-        {status === 'loading' ? 'Subscribing…' : 'Subscribe to Austin events'}
+        {status === 'loading' ? 'Subscribing…' : 'Subscribe'}
       </Button>
     </form>
   )

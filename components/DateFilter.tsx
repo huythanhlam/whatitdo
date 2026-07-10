@@ -1,11 +1,12 @@
 'use client'
 import { useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { WHEN_PRESETS } from '@/lib/dateRanges'
 import { Calendar, X } from 'lucide-react'
 
 export function DateFilter() {
   const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const when = searchParams.get('when')
   const from = searchParams.get('from')
@@ -24,7 +25,7 @@ export function DateFilter() {
     if (value && when !== value) params.set('when', value)
     else params.delete('when')
     setShowCustom(false)
-    router.push(`/?${params.toString()}`)
+    router.push(`${pathname}?${params.toString()}`)
   }
 
   function applyCustom() {
@@ -34,7 +35,7 @@ export function DateFilter() {
     params.delete('page')
     if (fromVal) params.set('from', fromVal); else params.delete('from')
     if (toVal) params.set('to', toVal); else params.delete('to')
-    router.push(`/?${params.toString()}`)
+    router.push(`${pathname}?${params.toString()}`)
   }
 
   function clearCustom() {
@@ -43,7 +44,7 @@ export function DateFilter() {
     params.delete('to')
     params.delete('page')
     setFromVal(''); setToVal(''); setShowCustom(false)
-    router.push(`/?${params.toString()}`)
+    router.push(`${pathname}?${params.toString()}`)
   }
 
   const pill = (active: boolean) =>

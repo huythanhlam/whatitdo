@@ -1,5 +1,5 @@
 'use client'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
@@ -7,6 +7,7 @@ import { CATEGORIES } from '@/lib/categories'
 
 export function SidebarFilters({ compact = false }: { compact?: boolean }) {
   const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const selected = searchParams.getAll('category')
 
@@ -20,13 +21,13 @@ export function SidebarFilters({ compact = false }: { compact?: boolean }) {
       [...existing, slug].forEach(s => params.append('category', s))
     }
     params.delete('page')
-    router.push(`/?${params.toString()}`)
+    router.push(`${pathname}?${params.toString()}`)
   }
 
   function clearAll() {
     const params = new URLSearchParams(searchParams.toString())
     params.delete('category')
-    router.push(`/?${params.toString()}`)
+    router.push(`${pathname}?${params.toString()}`)
   }
 
   if (compact) {

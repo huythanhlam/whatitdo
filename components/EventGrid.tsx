@@ -1,7 +1,7 @@
 import { EventCard } from './EventCard'
 import type { EnrichedEvent } from '@/lib/types'
 
-export function EventGrid({ events }: { events: EnrichedEvent[] }) {
+export function EventGrid({ events, basePath }: { events: EnrichedEvent[]; basePath: string }) {
   if (events.length === 0) {
     return (
       <div className="text-center py-20 text-muted-foreground">
@@ -18,6 +18,7 @@ export function EventGrid({ events }: { events: EnrichedEvent[] }) {
         <EventCard
           key={event.id}
           event={event}
+          basePath={basePath}
           featured={event.is_featured}
           featuredLabel={event.featured_label ?? undefined}
         />

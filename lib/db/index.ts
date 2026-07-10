@@ -17,6 +17,15 @@ function getDb(): Promise<Db> {
   return isLocal() ? getPgliteDb() : Promise.resolve(getPgDb())
 }
 
+export type City = {
+  id: number
+  slug: string
+  name: string
+  state: string
+  timezone: string
+  enabled: boolean
+}
+
 type EnrichedEvent = Record<string, unknown> & {
   id: string
   categories: { id: number; slug: string; name: string; color: string }[]
@@ -71,10 +80,12 @@ const FTS_MATCH = `to_tsvector('english',
 // listEvents
 // ---------------------------------------------------------------------------
 export async function listEvents(opts: {
+  cityId: number
   q?: string
   categories?: string[]
   from?: string
   to?: string
+  isFree?: boolean
   limit: number
   offset: number
 }): Promise<EnrichedEvent[]> {
@@ -83,11 +94,17 @@ export async function listEvents(opts: {
   const fromIso = opts.from && opts.from > nowIso ? opts.from : nowIso
 
   const params: unknown[] = [fromIso]
-  let where = 'e.start_time >= $1'
+  let where = "e.start_time >= $1 AND e.status = 'approved'"
+
+  params.push(opts.cityId)
+  where += ` AND e.city_id = $${params.length}`
 
   if (opts.to) {
     params.push(opts.to)
     where += ` AND e.start_time <= $${params.length}`
+  }
+  if (opts.isFree) {
+    where += ` AND e.is_free = true`
   }
   if (opts.q) {
     params.push(opts.q)
@@ -118,18 +135,23 @@ export async function listEvents(opts: {
 // countEvents — total matching the same filters (for "showing X of N")
 // ---------------------------------------------------------------------------
 export async function countEvents(opts: {
+  cityId: number
   q?: string
   categories?: string[]
   from?: string
   to?: string
+  isFree?: boolean
 }): Promise<number> {
   const db = await getDb()
   const nowIso = new Date().toISOString()
   const fromIso = opts.from && opts.from > nowIso ? opts.from : nowIso
 
   const params: unknown[] = [fromIso]
-  let where = 'e.start_time >= $1'
+  let where = "e.start_time >= $1 AND e.status = 'approved'"
+  params.push(opts.cityId)
+  where += ` AND e.city_id = $${params.length}`
   if (opts.to) { params.push(opts.to); where += ` AND e.start_time <= $${params.length}` }
+  if (opts.isFree) where += ` AND e.is_free = true`
   if (opts.q) { params.push(opts.q); where += ` AND ${FTS_MATCH.replace('$PARAM', `$${params.length}`)}` }
   if (opts.categories && opts.categories.length > 0) {
     params.push(opts.categories)
@@ -150,7 +172,7 @@ export async function getEvent(id: string): Promise<EnrichedEvent | null> {
   const db = await getDb()
   const nowIso = new Date().toISOString()
   const rows = await db.query<Record<string, unknown>>(
-    `SELECT e.*, ${CATEGORIES_JSON}, ${SOURCES_JSON} FROM events e WHERE e.id = $1`,
+    `SELECT e.*, ${CATEGORIES_JSON}, ${SOURCES_JSON} FROM events e WHERE e.id = $1 AND e.status = 'approved'`,
     [id]
   )
   if (rows.length === 0) return null
@@ -208,29 +230,40 @@ export async function findDedupCandidates(opts: {
 // Insert a brand-new canonical event. Caller supplies the normalized keys.
 export async function insertEvent(
   raw: RawEvent,
-  keys: { cityId: number; titleNorm: string; venueNorm: string | null }
+  keys: { cityId: number; titleNorm: string; venueNorm: string | null; status?: 'approved' | 'pending' | 'rejected' }
 ): Promise<string> {
   const db = await getDb()
   const rows = await db.query<{ id: string }>(
     `INSERT INTO events (title, description, start_time, end_time, venue_name,
        venue_address, image_url, ticket_url, source, source_id, is_free,
-       price_min, price_max, city_id, title_norm, venue_norm, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16, NOW())
+       price_min, price_max, city_id, title_norm, venue_norm, status, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17, NOW())
      RETURNING id`,
     [raw.title, raw.description, raw.start_time, raw.end_time, raw.venue_name,
      raw.venue_address, raw.image_url, raw.ticket_url, raw.source, raw.source_id,
-     raw.is_free, raw.price_min, raw.price_max, keys.cityId, keys.titleNorm, keys.venueNorm]
+     raw.is_free, raw.price_min, raw.price_max, keys.cityId, keys.titleNorm, keys.venueNorm,
+     keys.status ?? 'approved']
   )
   return rows[0].id
 }
 
-// Fetch the mergeable columns of a canonical event for mergeFields().
+// Fetch the mergeable columns of a canonical event for mergeFields(). Joins
+// `sources` by name to resolve the event's CURRENT source's real `kind` (there
+// is no `source_kind` column on `events`) so sourceTrust() can rank
+// instance-named sources (e.g. 'crawl:mohawkaustin-com') correctly instead of
+// only recognizing its static map's literal names — see lib/dedup.ts.
+// `s.kind` is null when `e.source` has no matching `sources` row (legacy/ad-hoc
+// sources like 'seed'/'submission'/bare 'crawl' test fixtures), in which case
+// sourceTrust() falls back to its name-based map exactly as before.
 export async function getEventRow(id: string): Promise<ExistingEvent | null> {
   const db = await getDb()
   const rows = await db.query<ExistingEvent>(
-    `SELECT source, source_id, title, venue_norm, description, image_url,
-            venue_name, venue_address, end_time, ticket_url, is_free, price_min, price_max
-     FROM events WHERE id = $1`,
+    `SELECT e.source, e.source_id, e.title, e.venue_norm, e.description, e.image_url,
+            e.venue_name, e.venue_address, e.end_time, e.ticket_url, e.is_free,
+            e.price_min, e.price_max, s.kind AS source_kind
+     FROM events e
+     LEFT JOIN sources s ON s.name = e.source
+     WHERE e.id = $1`,
     [id]
   )
   return rows[0] ?? null
@@ -308,17 +341,18 @@ export async function addSubscription(sub: {
   email: string
   frequency: string
   category_slugs: string[]
+  cityId: number
 }): Promise<string | null> {
   const db = await getDb()
   // token is generated by the column default (pgcrypto in Postgres, a shim in
   // PGlite); RETURNING hands it back for the confirmation/unsubscribe links.
   const rows = await db.query<{ token: string }>(
-    `INSERT INTO subscriptions (email, frequency, category_slugs)
-     VALUES ($1, $2, $3)
-     ON CONFLICT (email) DO UPDATE SET frequency = EXCLUDED.frequency,
+    `INSERT INTO subscriptions (email, frequency, category_slugs, city_id)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (email, city_id) DO UPDATE SET frequency = EXCLUDED.frequency,
        category_slugs = EXCLUDED.category_slugs
      RETURNING token`,
-    [sub.email, sub.frequency, sub.category_slugs]
+    [sub.email, sub.frequency, sub.category_slugs, sub.cityId]
   )
   return rows[0]?.token ?? null
 }
@@ -328,13 +362,14 @@ export async function removeSubscription(token: string): Promise<void> {
   await db.query(`DELETE FROM subscriptions WHERE token = $1`, [token])
 }
 
-export async function listSubscriptions(frequency: string): Promise<
-  { email: string; token: string; category_slugs: string[] }[]
-> {
+export async function listSubscriptions(
+  frequency: string,
+  cityId: number
+): Promise<{ email: string; token: string; category_slugs: string[] }[]> {
   const db = await getDb()
   return db.query<{ email: string; token: string; category_slugs: string[] }>(
-    `SELECT email, token, category_slugs FROM subscriptions WHERE frequency = $1`,
-    [frequency]
+    `SELECT email, token, category_slugs FROM subscriptions WHERE frequency = $1 AND city_id = $2`,
+    [frequency, cityId]
   )
 }
 
@@ -349,8 +384,9 @@ export async function addFeatured(f: {
 }): Promise<Record<string, unknown> | null> {
   const db = await getDb()
   const rows = await db.query<Record<string, unknown>>(
-    `INSERT INTO featured_listings (event_id, starts_at, ends_at, ad_label)
-     VALUES ($1, $2, $3, $4) RETURNING *`,
+    `INSERT INTO featured_listings (event_id, starts_at, ends_at, ad_label, city_id)
+     VALUES ($1, $2, $3, $4, (SELECT city_id FROM events WHERE id = $1))
+     RETURNING *`,
     [f.event_id, f.starts_at, f.ends_at, f.ad_label]
   )
   return rows[0] ?? null
@@ -393,6 +429,34 @@ export async function setSourceContentHash(id: number, hash: string): Promise<vo
 export async function touchSourceSuccess(id: number): Promise<void> {
   const db = await getDb()
   await db.query(`UPDATE sources SET last_success = NOW() WHERE id = $1`, [id])
+}
+
+// ---------------------------------------------------------------------------
+// Cities (Phase 3)
+// ---------------------------------------------------------------------------
+export async function getEnabledCities(): Promise<City[]> {
+  const db = await getDb()
+  return db.query<City>(
+    `SELECT id, slug, name, state, timezone, enabled FROM cities WHERE enabled = true ORDER BY id ASC`
+  )
+}
+
+export async function getCityBySlug(slug: string): Promise<City | null> {
+  const db = await getDb()
+  const rows = await db.query<City>(
+    `SELECT id, slug, name, state, timezone, enabled FROM cities WHERE slug = $1`,
+    [slug]
+  )
+  return rows[0] ?? null
+}
+
+export async function getCityById(id: number): Promise<City | null> {
+  const db = await getDb()
+  const rows = await db.query<City>(
+    `SELECT id, slug, name, state, timezone, enabled FROM cities WHERE id = $1`,
+    [id]
+  )
+  return rows[0] ?? null
 }
 
 // ---------------------------------------------------------------------------
@@ -448,30 +512,69 @@ export async function finishSourceRun(
 }
 
 // The most recent `perSource` runs for each source, newest first — the raw
-// material for /api/admin/health's staleness check.
-export async function recentSourceRuns(perSource: number): Promise<SourceRun[]> {
+// material for /api/admin/health's staleness check. Only runs whose source_id
+// joins to a `sources` row in `cityId` are included (an INNER JOIN, so
+// legacy/ad-hoc runs with a NULL source_id are naturally excluded — they
+// can't be attributed to any city). The city filter is applied to the OUTER
+// query, not the window-function partition, so the per-source "last N runs"
+// ranking is unaffected by the join.
+export async function recentSourceRuns(perSource: number, cityId: number): Promise<SourceRun[]> {
   const db = await getDb()
   return db.query<SourceRun>(
-    `SELECT * FROM (
+    `SELECT t.* FROM (
        SELECT sr.*, ROW_NUMBER() OVER (PARTITION BY source ORDER BY started_at DESC) AS rn
        FROM source_runs sr
-     ) t WHERE rn <= $1
-     ORDER BY source ASC, started_at DESC`,
-    [perSource]
+     ) t
+     JOIN sources s ON s.id = t.source_id
+     WHERE t.rn <= $1 AND s.city_id = $2
+     ORDER BY t.source ASC, t.started_at DESC`,
+    [perSource, cityId]
   )
+}
+
+// ---------------------------------------------------------------------------
+// Moderation (Phase 2: public submissions land as 'pending')
+// ---------------------------------------------------------------------------
+export type PendingEvent = {
+  id: string
+  title: string
+  venue_name: string | null
+  start_time: string
+  source: string
+  created_at: string
+}
+
+export async function listPendingEvents(cityId: number): Promise<PendingEvent[]> {
+  const db = await getDb()
+  return db.query<PendingEvent>(
+    `SELECT id, title, venue_name, start_time, source, created_at FROM events
+     WHERE city_id = $1 AND status = 'pending' ORDER BY created_at DESC`,
+    [cityId]
+  )
+}
+
+export async function approveEvent(id: string): Promise<void> {
+  const db = await getDb()
+  await db.query(`UPDATE events SET status = 'approved', updated_at = NOW() WHERE id = $1`, [id])
+}
+
+export async function rejectEvent(id: string): Promise<void> {
+  const db = await getDb()
+  await db.query(`UPDATE events SET status = 'rejected', updated_at = NOW() WHERE id = $1`, [id])
 }
 
 // ---------------------------------------------------------------------------
 // Digest helper
 // ---------------------------------------------------------------------------
-export async function getEventsBetween(startIso: string, endIso: string): Promise<EnrichedEvent[]> {
+export async function getEventsBetween(cityId: number, startIso: string, endIso: string): Promise<EnrichedEvent[]> {
   const db = await getDb()
   const nowIso = new Date().toISOString()
   const rows = await db.query<Record<string, unknown>>(
     `SELECT e.*, ${CATEGORIES_JSON}
-     FROM events e WHERE e.start_time >= $1 AND e.start_time <= $2
+     FROM events e WHERE e.city_id = $1 AND e.status = 'approved'
+       AND e.start_time >= $2 AND e.start_time <= $3
      ORDER BY e.start_time ASC`,
-    [startIso, endIso]
+    [cityId, startIso, endIso]
   )
   return rows.map(r => enrichRow(r, nowIso))
 }

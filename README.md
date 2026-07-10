@@ -1,10 +1,12 @@
 # What It Do ATX
 
-An Austin events aggregator built on Next.js 16 (App Router, React 19). It
-ingests events daily from many sources (Eventbrite, City of Austin iCal,
-Ticketmaster/SeatGeek, local newspaper RSS, social, YouTube, and a Gemini-powered
-page crawler), tags and de-dupes them, and serves a filterable/searchable grid +
-calendar with email digests and paid featured listings.
+A multi-city events aggregator built on Next.js 16 (App Router, React 19),
+currently live for **Austin** and **Houston** under `/[city]/` routing (`/`
+redirects to the first enabled city). It ingests events daily from many
+sources (Eventbrite, City iCal, Ticketmaster/SeatGeek, local newspaper RSS,
+social, YouTube, and a Gemini-powered page crawler), tags and de-dupes them,
+and serves a filterable/searchable grid + calendar with email digests and paid
+featured listings.
 
 **It runs with zero credentials** — no accounts, no keys — thanks to an embedded
 in-memory Postgres (PGlite) seeded with real Austin events.
@@ -16,32 +18,61 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). With no `DATABASE_URL`
-configured the app uses embedded PGlite + a built-in seed, so search, category
-filters, event detail pages, subscriptions, calendar, and featured listings all
-work immediately. Tagging falls back to keyword matching (no Gemini key needed).
+Open [http://localhost:3000](http://localhost:3000) (redirects to
+[http://localhost:3000/austin](http://localhost:3000/austin); Houston is at
+[http://localhost:3000/houston](http://localhost:3000/houston)). With no
+`DATABASE_URL` configured the app uses embedded PGlite + a built-in seed, so
+search, category filters, event detail pages, subscriptions, calendar, and
+featured listings all work immediately. Tagging falls back to keyword matching
+(no Gemini key needed).
 
 Pull in more live events on demand:
 
 ```bash
-curl -X POST http://localhost:3000/api/ingest   # scans sources + tags events (dev auth is open)
+curl -X POST http://localhost:3000/api/ingest   # scans sources for every enabled city + tags events (dev auth is open)
+
+# Or scope a run to a single city:
+curl -X POST 'http://localhost:3000/api/ingest?city=houston'
 ```
 
 ### Import from an influencer post or aggregator page
 
 `POST /api/import` crawls a page (or pasted post text) and extracts every
 upcoming event it finds. **Requires `GEMINI_API_KEY`** (it reads free text).
+`city` defaults to `austin` when omitted, but pass it explicitly for any other
+city.
 
 ```bash
 # Crawl a public aggregator / link-in-bio page:
 curl -X POST http://localhost:3000/api/import \
-  -H 'content-type: application/json' -d '{"url":"https://365thingsaustin.com/"}'
+  -H 'content-type: application/json' -d '{"url":"https://365thingsaustin.com/", "city":"austin"}'
 
 # Or paste a caption from a login-walled post:
 curl -X POST http://localhost:3000/api/import \
   -H 'content-type: application/json' \
-  -d '{"text":"📅 Sat July 4, 8pm — Indie Night @ Mohawk Austin, $15. Tickets in bio!"}'
+  -d '{"text":"📅 Sat July 4, 8pm — Indie Night @ Mohawk Austin, $15. Tickets in bio!", "city":"austin"}'
 ```
+
+### Public event submissions + admin moderation
+
+Anyone can submit an event (no account needed) at `/[city]/submit` (e.g.
+[http://localhost:3000/austin/submit](http://localhost:3000/austin/submit)) —
+same url-or-pasted-text input as `/api/import`, backed by the public
+`POST /api/submissions` route. Submissions land as `pending` (an `events.status`
+column) and never appear publicly until approved.
+
+```bash
+curl -X POST http://localhost:3000/api/submissions \
+  -H 'content-type: application/json' \
+  -d '{"text":"📅 Sat July 4, 8pm — Indie Night @ Mohawk Austin, $15.", "city":"austin"}'
+```
+
+Review and approve/reject pending submissions at `/[city]/admin` (e.g.
+[http://localhost:3000/austin/admin](http://localhost:3000/austin/admin)),
+which also shows per-source health. It's gated by the same `CRON_SECRET`
+bearer token as the other admin/cron endpoints (paste any string into the
+token field in dev — auth is open outside production; in production paste the
+real `CRON_SECRET`, stored in the browser's local storage).
 
 ## Scripts
 
@@ -101,8 +132,10 @@ npm i -g vercel && vercel deploy
 ```
 
 Add the same env vars in the Vercel dashboard. The crons in
-[`vercel.json`](vercel.json) then run the daily scan (6am), daily digest (8am),
-and weekly digest (Mon 2pm) automatically.
+[`vercel.json`](vercel.json) then run automatically: a per-city daily ingest,
+staggered so each city gets its own run within the function's time budget
+(Austin at 6:00am, Houston at 6:15am), plus the daily digest (8am) and weekly
+digest (Mon 2pm).
 
 **Migrations on deploy.** Postgres does not auto-migrate at runtime, so schema
 changes must reach the shared DB before the code that needs them. CI applies them
@@ -132,7 +165,7 @@ PR and on `main` (`.github/workflows/ci.yml`).
 ## Architecture notes
 
 - **RSC-with-direct-DB fetching** — pages query the database in Server
-  Components (`app/page.tsx`); no client fetch waterfall.
+  Components (`app/[city]/page.tsx`); no client fetch waterfall.
 - **URL-as-state filters** — search, categories, date range, view, and calendar
   month all live in query params, so every view is shareable and server-rendered.
 - **One query layer** — `lib/db` runs raw SQL over a `Db` driver seam: a `pg`
