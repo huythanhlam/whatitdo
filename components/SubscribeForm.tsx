@@ -39,7 +39,7 @@ export function SubscribeForm() {
         <p className="text-5xl">🎉</p>
         <h2 className="text-xl font-bold">You&apos;re subscribed!</h2>
         <p className="text-sm text-muted-foreground">Check your inbox — first digest arrives tomorrow morning.</p>
-        <Link href={`/${city}`} className="block mt-4 text-sm text-violet-600 hover:underline">Browse events now →</Link>
+        <Link href={`/${city}`} className="block mt-4 text-sm text-primary hover:underline">Browse events now →</Link>
       </div>
     )
   }
@@ -68,7 +68,7 @@ export function SubscribeForm() {
                 value={f}
                 checked={frequency === f}
                 onChange={() => setFrequency(f)}
-                className="accent-violet-600"
+                className="accent-primary"
               />
               <span className="capitalize">{f}</span>
             </label>
@@ -98,13 +98,13 @@ export function SubscribeForm() {
       </div>
 
       {status === 'error' && (
-        <p className="text-sm text-red-500">Something went wrong. Please try again.</p>
+        <p className="text-sm text-destructive">Something went wrong. Please try again.</p>
       )}
 
       <Button
         type="submit"
         disabled={status === 'loading'}
-        className="w-full bg-violet-600 hover:bg-violet-700 text-white"
+        className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
       >
         {status === 'loading' ? 'Subscribing…' : 'Subscribe'}
       </Button>

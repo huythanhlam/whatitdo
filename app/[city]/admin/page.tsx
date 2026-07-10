@@ -77,7 +77,7 @@ export default function AdminPage() {
           placeholder="CRON_SECRET"
           className="border rounded-md px-3 py-2 w-full mb-3"
         />
-        <button onClick={saveToken} className="bg-violet-600 text-white px-4 py-2 rounded-md">
+        <button onClick={saveToken} className="bg-primary text-primary-foreground px-4 py-2 rounded-md">
           Continue
         </button>
       </div>
@@ -87,7 +87,7 @@ export default function AdminPage() {
   return (
     <div className="max-w-3xl mx-auto py-10 px-4 space-y-10">
       <h1 className="text-xl font-bold capitalize">{city} admin</h1>
-      {error && <p className="text-red-500 text-sm">{error}</p>}
+      {error && <p className="text-destructive text-sm">{error}</p>}
 
       <section>
         <h2 className="font-semibold mb-3">Pending submissions ({pending?.length ?? 0})</h2>
@@ -101,8 +101,8 @@ export default function AdminPage() {
                 </p>
               </div>
               <div className="flex gap-2 shrink-0">
-                <button onClick={() => act(e.id, 'approve')} className="text-xs bg-emerald-600 text-white px-3 py-1.5 rounded-md">Approve</button>
-                <button onClick={() => act(e.id, 'reject')} className="text-xs bg-red-600 text-white px-3 py-1.5 rounded-md">Reject</button>
+                <button onClick={() => act(e.id, 'approve')} className="text-xs bg-success text-success-foreground px-3 py-1.5 rounded-md">Approve</button>
+                <button onClick={() => act(e.id, 'reject')} className="text-xs bg-destructive text-destructive-foreground px-3 py-1.5 rounded-md">Reject</button>
               </div>
             </div>
           ))}
@@ -116,7 +116,7 @@ export default function AdminPage() {
         </h2>
         <div className="space-y-1 text-sm">
           {(health?.sources ?? []).map(s => (
-            <div key={s.source} className={`flex justify-between border-b py-1 ${s.stale ? 'text-red-600' : ''}`}>
+            <div key={s.source} className={`flex justify-between border-b py-1 ${s.stale ? 'text-destructive' : ''}`}>
               <span>{s.source}</span>
               <span>{s.last_status ?? '—'} · {s.last_run_at ? new Date(s.last_run_at).toLocaleString() : 'never'}</span>
             </div>

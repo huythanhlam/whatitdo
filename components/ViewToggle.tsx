@@ -27,18 +27,18 @@ export function ViewToggle() {
 
   const btn = (active: boolean) =>
     `flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors ${
-      active ? 'bg-violet-600 text-white' : 'bg-white text-slate-600 hover:text-violet-700'
+      active ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:text-primary'
     }`
 
   return (
-    <div className="inline-flex rounded-lg border border-slate-200 overflow-hidden shrink-0">
+    <div className="inline-flex rounded-lg border border-border overflow-hidden shrink-0">
       <button onClick={() => setView('grid')} className={btn(view === 'grid')} aria-pressed={view === 'grid'}>
         <LayoutGrid className="w-4 h-4" />
         <span className="hidden sm:inline">Grid</span>
       </button>
       <button
         onClick={() => setView('calendar')}
-        className={`${btn(view === 'calendar')} border-l border-slate-200`}
+        className={`${btn(view === 'calendar')} border-l border-border`}
         aria-pressed={view === 'calendar'}
       >
         <CalendarDays className="w-4 h-4" />
@@ -47,7 +47,7 @@ export function ViewToggle() {
       {mapsConfigured && (
         <button
           onClick={() => setView('map')}
-          className={`${btn(view === 'map')} border-l border-slate-200`}
+          className={`${btn(view === 'map')} border-l border-border`}
           aria-pressed={view === 'map'}
         >
           <MapPin className="w-4 h-4" />

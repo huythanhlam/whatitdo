@@ -46,11 +46,11 @@ export async function POST(req: NextRequest) {
       subject: `You're subscribed to ${city.name} events!`,
       html: `
         <div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px">
-          <h2 style="color:#7c3aed">You're in! 🎉</h2>
+          <h2 style="color:#C1502E">You're in! 🎉</h2>
           <p>You signed up for <strong>${escapeHtml(frequency)}</strong> ${escapeHtml(city.name)} events updates for: <strong>${escapeHtml(categoryLabel)}</strong>.</p>
           <p>Your first digest will arrive soon.</p>
-          <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
-          <p style="font-size:12px;color:#888"><a href="${escapeHtml(unsubscribeUrl)}" style="color:#888">Unsubscribe</a></p>
+          <hr style="border:none;border-top:1px solid #F2E6D8;margin:24px 0">
+          <p style="font-size:12px;color:#8A6B4D"><a href="${escapeHtml(unsubscribeUrl)}" style="color:#8A6B4D">Unsubscribe</a></p>
         </div>
       `,
       headers: {
