@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { parseFeed } from './rss'
 import { mapYoutubeItems } from './youtube'
-import { pageFromHtml } from './crawler'
+import { pageFromHtml, pickRendered } from './crawler'
 
 const fixture = (name: string) => readFileSync(path.join(__dirname, '__fixtures__', name), 'utf8')
 
@@ -70,5 +70,43 @@ describe('pageFromHtml (crawl fixture)', () => {
 
   it('captures the og:image', () => {
     expect(page.image_url).toBe('https://cdn.example.com/weekend.jpg')
+  })
+})
+
+describe('pickRendered (BROWSER_FETCH_URL response shapes)', () => {
+  it('reads crawl4ai /md shape ({markdown})', () => {
+    expect(pickRendered({ markdown: 'hello world' })).toEqual({ text: 'hello world' })
+  })
+
+  it('reads crawl4ai /crawl shape ({results:[{html}]})', () => {
+    expect(pickRendered({ results: [{ html: '<p>hi</p>' }] })).toEqual({ html: '<p>hi</p>' })
+  })
+
+  it('reads Firecrawl /v1/scrape shape ({success, data:{markdown}})', () => {
+    expect(pickRendered({ success: true, data: { markdown: 'firecrawl content' } })).toEqual({
+      text: 'firecrawl content',
+    })
+  })
+
+  it('prefers html over markdown when Firecrawl returns both', () => {
+    expect(pickRendered({ success: true, data: { html: '<p>rendered</p>', markdown: 'md fallback' } })).toEqual({
+      html: '<p>rendered</p>',
+    })
+  })
+
+  it('reads Browserless/ScrapingBee-style flat {html}/{content}', () => {
+    expect(pickRendered({ html: '<p>hi</p>' })).toEqual({ html: '<p>hi</p>' })
+    expect(pickRendered({ content: 'plain text' })).toEqual({ text: 'plain text' })
+  })
+
+  it('reads a bare string body', () => {
+    expect(pickRendered('just text')).toEqual({ html: 'just text' })
+  })
+
+  it('returns null for empty/unrecognized shapes', () => {
+    expect(pickRendered('')).toBeNull()
+    expect(pickRendered({})).toBeNull()
+    expect(pickRendered(null)).toBeNull()
+    expect(pickRendered({ success: true, data: {} })).toBeNull()
   })
 })

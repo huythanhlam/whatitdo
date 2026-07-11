@@ -56,14 +56,22 @@ function firstString(...vals: unknown[]): string | undefined {
 
 // Normalize the many shapes a browser-render service can return into HTML or
 // text. Handles crawl4ai (`/md` → {markdown}, `/crawl` → {results:[{html,...}]}),
+// Firecrawl (`/v1/scrape` → {success, data:{markdown,html,...}}),
 // Browserless/ScrapingBee-style {html}/{content}, and bare string bodies.
-function pickRendered(data: unknown): Rendered | null {
+export function pickRendered(data: unknown): Rendered | null {
   if (typeof data === 'string') return data.trim() ? { html: data } : null
   const root = data as Record<string, unknown>
   const results = root?.results
-  const node = (Array.isArray(results) ? results[0] : Array.isArray(data) ? (data as unknown[])[0] : data) as
-    | Record<string, unknown>
-    | undefined
+  const wrapped = root?.data // Firecrawl nests the payload one level under `data`.
+  const node = (
+    Array.isArray(results)
+      ? results[0]
+      : wrapped && typeof wrapped === 'object' && !Array.isArray(wrapped)
+        ? wrapped
+        : Array.isArray(data)
+          ? (data as unknown[])[0]
+          : data
+  ) as Record<string, unknown> | undefined
   if (!node || typeof node !== 'object') return null
 
   const html = firstString(node.cleaned_html, node.html, node.fit_html)

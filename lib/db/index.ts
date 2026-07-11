@@ -613,10 +613,15 @@ export async function addFeatured(f: {
 // ---------------------------------------------------------------------------
 
 // Enabled source rows for a city, oldest-successful first so stale/never-run
-// sources are prioritized by the orchestrator.
-export async function getEnabledSources(cityId: number): Promise<SourceRow[]> {
+// sources are prioritized by the orchestrator. `cadence = 'weekly'` rows are
+// filtered down to one UTC day (Monday, matching vercel.json's daily cron
+// which itself runs on Mondays like every other day) so a slow-changing page
+// isn't re-crawled (and re-billed against the Gemini budget) every day for no
+// reason. `now` is injectable so this is deterministic in tests instead of
+// depending on which real-world day the suite happens to run.
+export async function getEnabledSources(cityId: number, now: Date = new Date()): Promise<SourceRow[]> {
   const db = await getDb()
-  return db.query<SourceRow>(
+  const rows = await db.query<SourceRow>(
     `SELECT id, city_id, name, kind, url, parser, cadence, enabled,
             last_success, content_hash, notes
      FROM sources
@@ -624,6 +629,8 @@ export async function getEnabledSources(cityId: number): Promise<SourceRow[]> {
      ORDER BY last_success ASC NULLS FIRST, id ASC`,
     [cityId]
   )
+  const isWeeklyRunDay = now.getUTCDay() === 1 // Monday
+  return rows.filter(r => r.cadence !== 'weekly' || isWeeklyRunDay)
 }
 
 export async function getSourceContentHash(id: number): Promise<string | null> {

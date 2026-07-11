@@ -219,10 +219,22 @@ export function buildEventsFromPage(page: CrawlPage, extracted: ExtractedEvent[]
   return out
 }
 
-const PAGE_TEXT_CAP = 9000 // chars of page text sent to the model
+// Chars of page text sent to the model. Content-dense pages (a newspaper's
+// full events calendar can run 50k+ chars) lose most of their events if this
+// is too tight — 9000 was verified to cut a 58k-char page down to ~15% of its
+// actual content, extracting only 4 of 42 events actually present on it.
+// But raising it is bounded by maxOutputTokens: a denser page (more events
+// per character, e.g. Community Impact's calendar) can still overflow the
+// response into invalid JSON at a cap that's perfectly safe on a sparser
+// page — and that boundary isn't fully deterministic run to run, so a single
+// "safe" constant can't be trusted alone. FALLBACK_TEXT_CAP below is the
+// resilience for that: retry once, much smaller, on a parse failure.
+const PAGE_TEXT_CAP = 16000
+const FALLBACK_TEXT_CAP = 6000
+const MAX_OUTPUT_TOKENS = 16384
 
-async function extractPage(page: CrawlPage, nowIso: string): Promise<RawEvent[]> {
-  const prompt = `You extract EVERY concrete, attendable event from the text of a single web page about Austin, Texas (an influencer post, an events roundup, or a link-in-bio page).
+function pagePrompt(page: CrawlPage, nowIso: string, textCap: number): string {
+  return `You extract EVERY concrete, attendable event from the text of a single web page about Austin, Texas (an influencer post, an events roundup, or a link-in-bio page).
 
 REFERENCE DATE (today): ${nowIso}
 PAGE URL: ${page.url}
@@ -248,11 +260,25 @@ Rules:
 - Respond with ONLY the JSON array. No markdown, no commentary.
 
 PAGE TEXT:
-${page.text.slice(0, PAGE_TEXT_CAP)}
+${page.text.slice(0, textCap)}
 
 JSON array:`
+}
 
-  const parsed = await geminiJson<ExtractedEvent[]>({ prompt, maxOutputTokens: 8192 })
+async function extractPage(page: CrawlPage, nowIso: string): Promise<RawEvent[]> {
+  const prompt = pagePrompt(page, nowIso, PAGE_TEXT_CAP)
+  let parsed = await geminiJson<ExtractedEvent[]>({ prompt, maxOutputTokens: MAX_OUTPUT_TOKENS })
+
+  // A dense page can pack enough events into PAGE_TEXT_CAP's worth of text
+  // that the model's response overflows maxOutputTokens and truncates into
+  // invalid JSON — geminiJson returns null rather than guess. Retry once
+  // with much less input so a truncated response can't happen, instead of
+  // losing every event on the page to one oversized call.
+  if (parsed === null && page.text.length > FALLBACK_TEXT_CAP) {
+    const fallbackPrompt = pagePrompt(page, nowIso, FALLBACK_TEXT_CAP)
+    parsed = await geminiJson<ExtractedEvent[]>({ prompt: fallbackPrompt, maxOutputTokens: MAX_OUTPUT_TOKENS })
+  }
+
   if (!Array.isArray(parsed)) return []
   return buildEventsFromPage(page, parsed, nowIso)
 }
