@@ -6,7 +6,11 @@ import { fetchSeatGeekEvents } from './seatgeek'
 import { fetchBlueskyEvents } from './social'
 import { fetchYoutubeEvents } from './youtube'
 import { fetchCrawlSource } from './crawler'
+import { fetchPaginatedCrawlSource } from './paginated-crawl'
 import { fetchFeed } from './rss'
+import { fetchJsonLdEvents } from './jsonld-events'
+import { fetchPartifulEvents } from './partiful'
+import { fetchSimpleviewEvents } from './simpleview'
 import { extractEvents } from '@/lib/extractor'
 
 const has = (v: string | undefined): boolean => !!v && v.length > 0
@@ -48,6 +52,18 @@ export const PARSERS: Record<string, SourceParser> = {
   rss:     simple(hasGeminiKey, (url, name) => fetchFeed(url!, name, { limit: 20 }).then(extractEvents)),
   bluesky: simple(hasGeminiKey, () => fetchBlueskyEvents()),
 
+  // Structured schema.org Event pages — no Gemini, exact and free where the
+  // site publishes it (thelongcenter.org, 365thingsaustin.com,
+  // austintexas.gov's per-event pages).
+  'events-jsonld': simple(() => true, (url, name) => fetchJsonLdEvents(url!, name)),
+
+  // Partiful's Next.js __NEXT_DATA__ payload — likewise structured, no Gemini.
+  partiful: simple(() => true, (url, name) => fetchPartifulEvents(url!, name)),
+
+  // Simpleview CMS DMO sites (austintexas.org): a public JSON REST API backs
+  // the events widget. `url` is the site origin, not an events path.
+  simpleview: simple(() => true, (url, name) => fetchSimpleviewEvents(url!, name)),
+
   // Crawl: content-hash aware, returns its own skip flag.
   crawl: {
     available: hasGeminiKey,
@@ -59,4 +75,14 @@ export const PARSERS: Record<string, SourceParser> = {
 
   // YouTube needs both its API key and Gemini.
   youtube: simple(() => has(process.env.YOUTUBE_API_KEY) && hasGeminiKey(), () => fetchYoutubeEvents()),
+
+  // Multi-page variant of `crawl`, for sources whose events span a numbered
+  // ?page=N pagination (e.g. calendar.austinchronicle.com's Staff Pick view).
+  'crawl-paginated': {
+    available: hasGeminiKey,
+    fetch: async (source) => {
+      const { events, skipped } = await fetchPaginatedCrawlSource(source)
+      return { events: withKind(source, events), skipped }
+    },
+  },
 }

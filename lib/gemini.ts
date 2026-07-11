@@ -26,9 +26,11 @@ function intEnv(name: string, fallback: number): number {
 }
 
 // Free AI Studio tier is limited by request COUNT, not dollars (PRODUCT-SPEC
-// §6.1): order of 10 req/min and a few hundred req/day. Defaults are chosen to
-// stay inside the free tier; one env var each raises them for the paid tier.
-const RPM = intEnv('GEMINI_RPM', 10)
+// §6.1): confirmed live at 5 req/min for gemini-2.5-flash (a 10 default here
+// previously undercounted this and let bursts trip 429s) and a few hundred
+// req/day. Defaults are chosen to stay inside the free tier; one env var each
+// raises them for the paid tier.
+const RPM = intEnv('GEMINI_RPM', 5)
 const DAILY_BUDGET = intEnv('GEMINI_DAILY_BUDGET', 200)
 
 // ---------------------------------------------------------------------------

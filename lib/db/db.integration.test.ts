@@ -428,6 +428,18 @@ describe('source queries (Phase 2B)', () => {
     const after = await getEnabledSources(1)
     expect(after.find(r => r.id === crawl.id)!.last_success).not.toBeNull()
   })
+
+  it('excludes weekly-cadence sources on a non-Monday, includes them on Monday', async () => {
+    const tuesday = new Date('2026-07-14T06:00:00Z')
+    const monday = new Date('2026-07-13T06:00:00Z')
+    const onTuesday = await getEnabledSources(1, tuesday)
+    const onMonday = await getEnabledSources(1, monday)
+    expect(onTuesday.some(r => r.cadence === 'weekly')).toBe(false)
+    expect(onMonday.some(r => r.cadence === 'weekly')).toBe(true)
+    // Daily-cadence sources are unaffected by the day of week.
+    expect(onTuesday.some(r => r.name === 'eventbrite')).toBe(true)
+    expect(onMonday.some(r => r.name === 'eventbrite')).toBe(true)
+  })
 })
 
 describe('Austin venue sources (migration 010)', () => {
