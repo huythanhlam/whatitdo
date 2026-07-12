@@ -463,13 +463,18 @@ describe('source queries (Phase 2B)', () => {
   })
 
   it('content hash round-trips and touchSourceSuccess sets last_success', async () => {
-    const rows = await getEnabledSources(1)
+    // Most 'crawl' rows are weekly cadence, so fetch on a Monday (see the
+    // day-of-week test below) rather than relying on today happening to be
+    // one — this test only cares about the hash/success round-trip, not
+    // cadence filtering.
+    const monday = new Date('2026-07-13T06:00:00Z')
+    const rows = await getEnabledSources(1, monday)
     const crawl = rows.find(r => r.parser === 'crawl')!
     expect(await getSourceContentHash(crawl.id)).toBeNull()
     await setSourceContentHash(crawl.id, 'deadbeef')
     expect(await getSourceContentHash(crawl.id)).toBe('deadbeef')
     await touchSourceSuccess(crawl.id)
-    const after = await getEnabledSources(1)
+    const after = await getEnabledSources(1, monday)
     expect(after.find(r => r.id === crawl.id)!.last_success).not.toBeNull()
   })
 
