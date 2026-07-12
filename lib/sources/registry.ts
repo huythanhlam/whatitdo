@@ -11,6 +11,7 @@ import { fetchFeed } from './rss'
 import { fetchJsonLdEvents } from './jsonld-events'
 import { fetchPartifulEvents } from './partiful'
 import { fetchSimpleviewEvents } from './simpleview'
+import { fetchCultureMapEvents } from './culturemap'
 import { extractEvents } from '@/lib/extractor'
 
 const has = (v: string | undefined): boolean => !!v && v.length > 0
@@ -63,6 +64,10 @@ export const PARSERS: Record<string, SourceParser> = {
   // Simpleview CMS DMO sites (austintexas.org): a public JSON REST API backs
   // the events widget. `url` is the site origin, not an events path.
   simpleview: simple(() => true, (url, name) => fetchSimpleviewEvents(url!, name)),
+
+  // austin.culturemap.com/events/: static server-rendered HTML, day-at-a-time
+  // (?tags=YYYYMMDD), no Gemini. `url` is the events index URL.
+  culturemap: simple(() => true, (url, name) => fetchCultureMapEvents(url!, name)),
 
   // Crawl: content-hash aware, returns its own skip flag.
   crawl: {
