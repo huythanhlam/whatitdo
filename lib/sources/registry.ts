@@ -12,6 +12,7 @@ import { fetchJsonLdEvents } from './jsonld-events'
 import { fetchPartifulEvents } from './partiful'
 import { fetchSimpleviewEvents } from './simpleview'
 import { fetchCultureMapEvents } from './culturemap'
+import { fetchMeetupEvents } from './meetup'
 import { extractEvents } from '@/lib/extractor'
 
 const has = (v: string | undefined): boolean => !!v && v.length > 0
@@ -68,6 +69,11 @@ export const PARSERS: Record<string, SourceParser> = {
   // austin.culturemap.com/events/: static server-rendered HTML, day-at-a-time
   // (?tags=YYYYMMDD), no Gemini. `url` is the events index URL.
   culturemap: simple(() => true, (url, name) => fetchCultureMapEvents(url!, name)),
+
+  // meetup.com/find/: server-rendered Next.js page whose __NEXT_DATA__ embeds
+  // a full Apollo GraphQL cache of the search results, no Gemini. `url` is
+  // the find-page URL (location/filters baked in).
+  meetup: simple(() => true, (url, name) => fetchMeetupEvents(url!, name)),
 
   // Crawl: content-hash aware, returns its own skip flag.
   crawl: {
