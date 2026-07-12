@@ -650,7 +650,7 @@ export async function getEnabledSources(cityId: number, now: Date = new Date()):
   const db = await getDb()
   const rows = await db.query<SourceRow>(
     `SELECT id, city_id, name, kind, url, parser, cadence, enabled,
-            last_success, content_hash, notes
+            last_success, content_hash, notes, max_pages
      FROM sources
      WHERE city_id = $1 AND enabled = true
      ORDER BY last_success ASC NULLS FIRST, id ASC`,

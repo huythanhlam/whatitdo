@@ -13,7 +13,12 @@ import type { RawEvent, SourceRow } from './types'
 // and gets its content-hash-skip behavior from the same `hashPageText()`
 // mechanism, just applied to the combined text of every fetched page.
 
-const MAX_PAGES = 2 // Chronicle's Staff Pick view is 2 pages TOTAL — this is complete coverage, not a sample.
+// Default page count when a source doesn't override it via `max_pages`.
+// Chronicle's Staff Pick view is 2 pages TOTAL — this default is complete
+// coverage there, not a sample. Sources with far more pages (e.g. a full
+// events calendar) should set `max_pages` explicitly rather than inherit
+// this and silently only cover a small slice.
+const DEFAULT_MAX_PAGES = 2
 const FETCH_CONCURRENCY = 3
 
 // Page 1 is the URL unchanged; pages 2..maxPages set/replace a `page` query
@@ -53,7 +58,7 @@ export async function fetchPaginatedCrawlSource(
 ): Promise<{ events: RawEvent[]; skipped: boolean }> {
   if (!source.url) return { events: [], skipped: false }
 
-  const urls = buildPageUrls(source.url, MAX_PAGES)
+  const urls = buildPageUrls(source.url, source.max_pages ?? DEFAULT_MAX_PAGES)
   const fetched = await mapPool(urls, FETCH_CONCURRENCY, fetchPage)
 
   const page1 = fetched[0]
