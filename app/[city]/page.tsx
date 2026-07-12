@@ -2,11 +2,12 @@ import { Suspense } from 'react'
 import Link from 'next/link'
 import { SearchBar } from '@/components/SearchBar'
 import { SidebarFilters } from '@/components/SidebarFilters'
+import { SourceFilter } from '@/components/SourceFilter'
 import { EventList } from '@/components/EventList'
 import { CalendarView } from '@/components/CalendarView'
 import { MapView } from '@/components/MapView'
 import { ViewToggle } from '@/components/ViewToggle'
-import { listEvents, countEvents, listEventsForMap, type City } from '@/lib/db'
+import { listEvents, countEvents, listEventsForMap, getDistinctSources, type City } from '@/lib/db'
 import { requireCity } from '@/lib/cities'
 import { resolveDateRange } from '@/lib/dateRanges'
 import { gridRangeIso, currentCentralMonth } from '@/lib/calendar'
@@ -27,6 +28,10 @@ function toCategories(cats: string | string[] | undefined): string[] {
   return cats ? (typeof cats === 'string' ? [cats] : cats) : []
 }
 
+function toSources(sources: string | string[] | undefined): string[] {
+  return sources ? (typeof sources === 'string' ? [sources] : sources) : []
+}
+
 // The calendar's visible month is URL state (?cal=YYYY-MM, 1-indexed); default
 // to the current Central-time month.
 function parseCalMonth(cal: string | undefined): { year: number; month: number } {
@@ -45,14 +50,16 @@ function parseCalMonth(cal: string | undefined): { year: number; month: number }
 async function CalendarLoader({ city, searchParams }: { city: City; searchParams: Record<string, string | string[]> }) {
   const q = first(searchParams.q) ?? ''
   const categories = toCategories(searchParams.category)
+  const sources = toSources(searchParams.source)
   const { year, month } = parseCalMonth(first(searchParams.cal))
   const { fromIso, toIso } = gridRangeIso(year, month)
 
-  const events = await listEvents({ cityId: city.id, q, categories, from: fromIso, to: toIso, limit: 1000, offset: 0 })
+  const events = await listEvents({ cityId: city.id, q, categories, sources, from: fromIso, to: toIso, limit: 1000, offset: 0 })
 
   const qs = new URLSearchParams()
   if (q) qs.set('q', q)
   categories.forEach(c => qs.append('category', c))
+  sources.forEach(s => qs.append('source', s))
 
   return (
     <CalendarView
@@ -72,6 +79,7 @@ async function CalendarLoader({ city, searchParams }: { city: City; searchParams
 async function MapLoader({ city, searchParams }: { city: City; searchParams: Record<string, string | string[]> }) {
   const q = first(searchParams.q) ?? ''
   const categories = toCategories(searchParams.category)
+  const sources = toSources(searchParams.source)
   const range = resolveDateRange({
     when: first(searchParams.when),
     from: first(searchParams.from),
@@ -79,7 +87,7 @@ async function MapLoader({ city, searchParams }: { city: City; searchParams: Rec
   })
 
   const events = await listEventsForMap({
-    cityId: city.id, q, categories, from: range.fromIso, to: range.toIso ?? undefined, limit: 1000,
+    cityId: city.id, q, categories, sources, from: range.fromIso, to: range.toIso ?? undefined, limit: 1000,
   })
 
   const center = city.lat != null && city.lng != null
@@ -92,6 +100,7 @@ async function MapLoader({ city, searchParams }: { city: City; searchParams: Rec
 async function EventsLoader({ city, searchParams }: { city: City; searchParams: Record<string, string | string[]> }) {
   const q = first(searchParams.q) ?? ''
   const categories = toCategories(searchParams.category)
+  const sources = toSources(searchParams.source)
 
   const range = resolveDateRange({
     when: first(searchParams.when),
@@ -102,7 +111,7 @@ async function EventsLoader({ city, searchParams }: { city: City; searchParams: 
   // A DB failure here propagates to the route error boundary (app/error.tsx)
   // rather than being masked as "no events" — an outage should look different
   // from an empty result.
-  const filterArgs = { cityId: city.id, q, categories, from: range.fromIso, to: range.toIso ?? undefined }
+  const filterArgs = { cityId: city.id, q, categories, sources, from: range.fromIso, to: range.toIso ?? undefined }
   const [events, total] = await Promise.all([
     listEvents({ ...filterArgs, limit: 24, offset: 0 }),
     countEvents(filterArgs),
@@ -120,6 +129,7 @@ async function EventsLoader({ city, searchParams }: { city: City; searchParams: 
   const qs = new URLSearchParams()
   if (q) qs.set('q', q)
   categories.forEach(c => qs.append('category', c))
+  sources.forEach(s => qs.append('source', s))
   const when = first(searchParams.when); if (when) qs.set('when', when)
   const fromP = first(searchParams.from); if (fromP) qs.set('from', fromP)
   const toP = first(searchParams.to); if (toP) qs.set('to', toP)
@@ -152,6 +162,7 @@ export default async function CityHomePage({
   const rawView = first(sp.view)
   const view = rawView === 'calendar' ? 'calendar' : rawView === 'map' ? 'map' : 'grid'
   const base = `/${city.slug}`
+  const sources = await getDistinctSources(city.id)
 
   return (
     <div className="min-h-screen bg-background">
@@ -181,9 +192,12 @@ export default async function CityHomePage({
       </header>
 
       <div className="max-w-7xl mx-auto px-4 py-6 flex gap-8">
-        <div className="hidden md:block w-52 shrink-0 pt-1">
+        <div className="hidden md:block w-52 shrink-0 pt-1 space-y-6">
           <Suspense>
             <SidebarFilters />
+          </Suspense>
+          <Suspense>
+            <SourceFilter sources={sources} />
           </Suspense>
         </div>
 
@@ -203,10 +217,13 @@ export default async function CityHomePage({
             ))}
           </div>
 
-          {/* Category filters on mobile (sidebar is hidden < md) */}
-          <div className="md:hidden mb-5">
+          {/* Category + source filters on mobile (sidebar is hidden < md) */}
+          <div className="md:hidden mb-5 space-y-2">
             <Suspense>
               <SidebarFilters compact />
+            </Suspense>
+            <Suspense>
+              <SourceFilter sources={sources} compact />
             </Suspense>
           </div>
 

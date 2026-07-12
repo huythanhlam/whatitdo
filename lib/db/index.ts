@@ -85,6 +85,7 @@ export async function listEvents(opts: {
   cityId: number
   q?: string
   categories?: string[]
+  sources?: string[]
   from?: string
   to?: string
   isFree?: boolean
@@ -119,6 +120,10 @@ export async function listEvents(opts: {
       JOIN categories c ON c.id = ec.category_id
       WHERE c.slug = ANY($${params.length}))`
   }
+  if (opts.sources && opts.sources.length > 0) {
+    params.push(opts.sources)
+    where += ` AND e.source = ANY($${params.length})`
+  }
   params.push(opts.limit)
   params.push(opts.offset)
 
@@ -140,6 +145,7 @@ export async function countEvents(opts: {
   cityId: number
   q?: string
   categories?: string[]
+  sources?: string[]
   from?: string
   to?: string
   isFree?: boolean
@@ -160,6 +166,10 @@ export async function countEvents(opts: {
     where += ` AND e.id IN (SELECT ec.event_id FROM event_categories ec
       JOIN categories c ON c.id = ec.category_id WHERE c.slug = ANY($${params.length}))`
   }
+  if (opts.sources && opts.sources.length > 0) {
+    params.push(opts.sources)
+    where += ` AND e.source = ANY($${params.length})`
+  }
   const rows = await db.query<{ count: string }>(
     `SELECT COUNT(*)::text AS count FROM events e WHERE ${where}`,
     params
@@ -176,6 +186,7 @@ export async function listEventsForMap(opts: {
   cityId: number
   q?: string
   categories?: string[]
+  sources?: string[]
   from?: string
   to?: string
   isFree?: boolean
@@ -208,6 +219,10 @@ export async function listEventsForMap(opts: {
       SELECT ec.event_id FROM event_categories ec
       JOIN categories c ON c.id = ec.category_id
       WHERE c.slug = ANY($${params.length}))`
+  }
+  if (opts.sources && opts.sources.length > 0) {
+    params.push(opts.sources)
+    where += ` AND e.source = ANY($${params.length})`
   }
   params.push(opts.limit)
 
@@ -506,6 +521,18 @@ export async function getDistinctNeighborhoods(cityId: number): Promise<string[]
     console.error('getDistinctNeighborhoods failed (degrading to no neighborhood filter):', e)
     return []
   }
+}
+
+// Distinct sources with at least one approved event in the city, for the
+// events page's source filter. Ordered alphabetically to match the checkbox
+// list rendering in components/SourceFilter.tsx.
+export async function getDistinctSources(cityId: number): Promise<string[]> {
+  const db = await getDb()
+  const rows = await db.query<{ source: string }>(
+    `SELECT DISTINCT source FROM events WHERE city_id = $1 AND status = 'approved' ORDER BY source`,
+    [cityId]
+  )
+  return rows.map(r => r.source)
 }
 
 // Distinct venues already present in `events`, for the one-off geocode

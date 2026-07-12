@@ -32,6 +32,7 @@ import {
   upgradeVenueGeocode,
   getDistinctVenues,
   getDistinctNeighborhoods,
+  getDistinctSources,
   listEventsForMap,
 } from './index'
 import { persistEvents } from '@/lib/persist'
@@ -74,6 +75,32 @@ describe('read layer against seeded PGlite', () => {
     const events = await listEvents({ cityId: 1, q: 'music', limit: 24, offset: 0 })
     // seed data includes music events; FTS should find at least one
     expect(Array.isArray(events)).toBe(true)
+  })
+
+  it('filters by source', async () => {
+    const all = await listEvents({ cityId: 1, limit: 100, offset: 0 })
+    const someSource = all[0].source as string
+    const filtered = await listEvents({ cityId: 1, sources: [someSource], limit: 100, offset: 0 })
+    expect(filtered.length).toBeGreaterThan(0)
+    expect(filtered.every(e => e.source === someSource)).toBe(true)
+
+    const unknown = await listEvents({ cityId: 1, sources: ['no-such-source'], limit: 100, offset: 0 })
+    expect(unknown.length).toBe(0)
+  })
+
+  it('countEvents respects the source filter', async () => {
+    const all = await listEvents({ cityId: 1, limit: 100, offset: 0 })
+    const someSource = all[0].source as string
+    const count = await countEvents({ cityId: 1, sources: [someSource] })
+    expect(count).toBeGreaterThan(0)
+    expect(count).toBeLessThanOrEqual(all.length)
+  })
+
+  it('getDistinctSources returns sorted, deduplicated sources for the city', async () => {
+    const sources = await getDistinctSources(1)
+    expect(sources.length).toBeGreaterThan(0)
+    expect(new Set(sources).size).toBe(sources.length)
+    expect([...sources].sort()).toEqual(sources)
   })
 })
 

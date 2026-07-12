@@ -10,6 +10,7 @@ export async function GET(req: NextRequest) {
 
   const q = searchParams.get('q') ?? ''
   const categories = searchParams.getAll('category')
+  const sources = searchParams.getAll('source')
   const isFree = searchParams.get('isFree') === 'true'
   const parsedPage = parseInt(searchParams.get('page') ?? '1', 10)
   const page = Number.isInteger(parsedPage) && parsedPage >= 1 ? parsedPage : 1
@@ -24,7 +25,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const events = await listEvents({
-      cityId: city.id, q, categories, isFree, from: range.fromIso, to: range.toIso ?? undefined, limit, offset,
+      cityId: city.id, q, categories, sources, isFree, from: range.fromIso, to: range.toIso ?? undefined, limit, offset,
     })
     return NextResponse.json({ events, page, limit, range: range.label })
   } catch (e) {
