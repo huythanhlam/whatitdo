@@ -102,6 +102,23 @@ describe('read layer against seeded PGlite', () => {
     expect(new Set(sources).size).toBe(sources.length)
     expect([...sources].sort()).toEqual(sources)
   })
+
+  it('getDistinctSources drops a source once it has no upcoming events left', async () => {
+    // A source whose only approved event is in the past (e.g. it stopped
+    // producing new events) should fall out of the filter dynamically —
+    // no manual pruning of a static source list required.
+    const e = mk({
+      source: 'itest-past-only-source',
+      source_id: 'past-only-1',
+      title: 'Past Only Test Show',
+      start_time: '2020-01-01T00:00:00Z',
+    })
+    const res = await persistEvents([e])
+    expect(res.inserted).toBe(1)
+
+    const sources = await getDistinctSources(1)
+    expect(sources).not.toContain('itest-past-only-source')
+  })
 })
 
 describe('persistEvents against PGlite', () => {
