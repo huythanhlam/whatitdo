@@ -523,14 +523,19 @@ export async function getDistinctNeighborhoods(cityId: number): Promise<string[]
   }
 }
 
-// Distinct sources with at least one approved event in the city, for the
-// events page's source filter. Ordered alphabetically to match the checkbox
-// list rendering in components/SourceFilter.tsx.
+// Distinct sources with at least one *upcoming* approved event in the city,
+// for the events page's source filter. Scoped to start_time >= now (same
+// cutoff listEvents uses) so a source dynamically drops out of the filter
+// once it stops producing events a visitor could actually see — no manual
+// list to prune when a source goes stale or gets disabled upstream.
+// Ordered alphabetically to match the checkbox list rendering in
+// components/SourceFilter.tsx.
 export async function getDistinctSources(cityId: number): Promise<string[]> {
   const db = await getDb()
+  const nowIso = new Date().toISOString()
   const rows = await db.query<{ source: string }>(
-    `SELECT DISTINCT source FROM events WHERE city_id = $1 AND status = 'approved' ORDER BY source`,
-    [cityId]
+    `SELECT DISTINCT source FROM events WHERE city_id = $1 AND status = 'approved' AND start_time >= $2 ORDER BY source`,
+    [cityId, nowIso]
   )
   return rows.map(r => r.source)
 }
