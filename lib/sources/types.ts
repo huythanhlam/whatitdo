@@ -50,6 +50,12 @@ export type SourceRow = {
   last_success: string | null
   content_hash: string | null
   notes: string | null
+  // Per-source override for 'crawl-paginated''s page count, for sources whose
+  // full listing is far bigger than 2 pages (e.g. a calendar with hundreds of
+  // pages) where 2 pages would silently be a small, unlabeled sample rather
+  // than the "complete coverage" 2 pages gives Chronicle's Staff Pick view.
+  // Null means the parser's own built-in default; ignored by every other parser.
+  max_pages: number | null
 }
 
 // A parser MECHANISM. Instances live in the DB (`SourceRow`); the code registry
