@@ -86,4 +86,29 @@ describe('buildEventsFromPage', () => {
     expect(out).toHaveLength(1)
     expect(out[0].title).toBe('Dated Show')
   })
+
+  it('uses the page image for a single-event page', () => {
+    const page: CrawlPage = {
+      source: 'crawl:test', url: 'https://example.com/show', title: 'Big Show', image_url: 'https://example.com/show.jpg', text: '',
+    }
+    const extracted: ExtractedEvent[] = [{ title: 'Big Show', start_time: '2026-07-05T19:00:00-05:00' }]
+    const out = buildEventsFromPage(page, extracted, NOW)
+    expect(out[0].image_url).toBe('https://example.com/show.jpg')
+  })
+
+  it('does not stamp the page image onto every event on a multi-event listing page', () => {
+    // A calendar/roundup page's og:image is necessarily generic (site logo,
+    // default banner) — it can't be every one of several distinct events' own
+    // photo, so it should be left for persist.ts's fallback chain instead.
+    const page: CrawlPage = {
+      source: 'crawl:test', url: 'https://example.com/calendar', title: 'Calendar', image_url: 'https://example.com/logo.jpg', text: '',
+    }
+    const extracted: ExtractedEvent[] = [
+      { title: 'Show A', start_time: '2026-07-05T19:00:00-05:00' },
+      { title: 'Show B', start_time: '2026-07-06T19:00:00-05:00' },
+    ]
+    const out = buildEventsFromPage(page, extracted, NOW)
+    expect(out).toHaveLength(2)
+    expect(out.every(e => e.image_url === null)).toBe(true)
+  })
 })

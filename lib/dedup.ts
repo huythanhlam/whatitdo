@@ -106,7 +106,11 @@ export function mergeFields(existing: ExistingEvent, incoming: RawEvent): FieldP
   if ((incoming.description?.length ?? 0) > (existing.description?.length ?? 0)) {
     patch.description = incoming.description
   }
-  // Any image over none.
+  // Any image over none. A trust-based *upgrade* of an existing image happens
+  // below, alongside title/ticket_url — the current image_url may itself be a
+  // low-trust source's fallback (persist.ts stamps a venue/category stock
+  // photo onto raw.image_url before insertion when the source had none), so
+  // it shouldn't permanently block a later, more-trusted source's real image.
   if (!existing.image_url && incoming.image_url) patch.image_url = incoming.image_url
   // Fill missing nullable fields.
   if (!existing.venue_name && incoming.venue_name) patch.venue_name = incoming.venue_name
@@ -133,6 +137,10 @@ export function mergeFields(existing: ExistingEvent, incoming: RawEvent): FieldP
       patch.title = incoming.title
       patch.title_norm = normalizeTitle(incoming.title, incoming.venue_name)
     }
+    // Upgrade the image too: a higher-trust source's own image is more
+    // likely to be the event's real photo than whatever the previous,
+    // lower-trust source supplied.
+    if (incoming.image_url) patch.image_url = incoming.image_url
   }
 
   return Object.keys(patch).length > 0 ? patch : null

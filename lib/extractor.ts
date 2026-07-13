@@ -202,7 +202,18 @@ export type CrawlPage = {
 
 // Build the per-event context (a synthetic FeedItem) that buildEvent consumes,
 // then validate via the shared buildEvent. Exported for unit testing.
+//
+// page.image_url is a single og:image/twitter:image meta tag for the WHOLE
+// page — only trustworthy as a specific event's own photo when the page is
+// actually about one event. A multi-event listing/calendar page's og:image is
+// necessarily generic (the site's logo, a default banner) and stamping it
+// onto every event on the page would present that generic image as if it
+// were each event's real photo. Only propagate it when there's exactly one
+// event to attach it to; otherwise leave image_url null so persist.ts's
+// fallback chain (venue image, then category stock photo — both already
+// clearly "not a real photo of this event") takes over instead.
 export function buildEventsFromPage(page: CrawlPage, extracted: ExtractedEvent[], nowIso: string): RawEvent[] {
+  const pageImage = extracted.length === 1 ? page.image_url : null
   const out: RawEvent[] = []
   for (const ex of extracted) {
     const item: FeedItem = {
@@ -211,7 +222,7 @@ export function buildEventsFromPage(page: CrawlPage, extracted: ExtractedEvent[]
       content: null, // description comes from the per-event blurb (ex.description)
       link: page.url, // fallback link; ex.url wins inside buildEvent when present
       published: null,
-      image_url: page.image_url,
+      image_url: pageImage,
     }
     const ev = buildEvent(item, { ...ex, is_event: true }, nowIso, { multiPerLink: true })
     if (ev) out.push(ev)
