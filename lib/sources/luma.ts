@@ -1,18 +1,29 @@
 import type { RawEvent } from './types'
 
-// luma.com/<city-slug> (e.g. luma.com/austin) is a Next.js discover page,
-// server-rendered enough to embed the first page of results in
-// __NEXT_DATA__ — but that same page also calls a public, unauthenticated
-// JSON endpoint (api.lu.ma/discover/get-paginated-events?slug=<city-slug>)
-// to fetch/paginate results, live-verified via plain `curl` to return the
-// identical event shape wrapped in `entries[]`, plus a `ticket_info` block
-// (price/is_free) the __NEXT_DATA__ payload's own event objects don't carry.
-// So, rather than scraping HTML, this hits that JSON endpoint directly and
-// follows its `has_more`/`next_cursor` pagination — no Gemini, no
-// BROWSER_FETCH_URL, same tier as meetup.ts/partiful.ts. `url` in the DB row
-// is the human discover page (e.g. https://luma.com/austin); the slug is
-// derived from its path so the row stays a clickable, human-verifiable link
-// like every other source's `url`.
+// luma.com/<city-slug> (e.g. luma.com/austin) is a Next.js discover page
+// whose own frontend calls a public, unauthenticated JSON endpoint
+// (api.lu.ma/discover/get-paginated-events) to fetch/paginate results. Live-
+// verified via plain `curl` that this endpoint takes two different geo
+// params with very different reach:
+//   - `slug=<city-slug>`: the page's own curated "Popular events" feed —
+//     capped at a small fixed set (Austin: 21) with `has_more` always false,
+//     regardless of `categories=<topic>` filters (verified: every one of
+//     Luma's 8 discover-page category tabs returns a strict SUBSET of that
+//     same 21, never anything new — so, unlike Meetup, sweeping categories
+//     buys nothing here).
+//   - `place_api_id=<discplace-id>`: the same underlying geo search, but
+//     genuinely paginated (`has_more`/`next_cursor`) — verified to return
+//     120 unique events for Austin (a strict superset of the 21 from
+//     `slug`), spanning the greater metro (Round Rock, Cedar Park,
+//     Georgetown, Leander, Pflugerville) roughly 8 months out.
+// So this fetches the discover page's HTML once per city to read its
+// embedded __NEXT_DATA__ place.api_id (the id isn't derivable from the URL
+// or returned by the paginated-events endpoint itself), then drives the JSON
+// API off that id, following pagination to exhaustion. No Gemini, no
+// BROWSER_FETCH_URL — same tier as meetup.ts/partiful.ts. `url` in the DB
+// row is the human discover page (e.g. https://luma.com/austin); if place-id
+// resolution ever fails, this falls back to the slug-based (smaller but
+// still real) feed rather than returning nothing.
 //
 // Luma's discover feed has no per-event description field (only the
 // calendar's own blurb, which isn't event-specific) — `description` is
@@ -24,8 +35,8 @@ const UA =
   '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 
 // Safety cap on cursor-following, mirroring paginated-crawl.ts's max_pages
-// guard — Austin's whole discover feed is one page (~21 events, has_more:
-// false), but this keeps a future larger city from looping unbounded.
+// guard — Austin's full place_api_id sweep is 3 pages (120 events), but this
+// keeps a much larger city from looping unbounded.
 const MAX_PAGES = 20
 
 type LumaPrice = { cents?: unknown; currency?: unknown }
@@ -133,7 +144,8 @@ export function eventsFromEntries(entries: unknown, source: string): RawEvent[] 
 // Pure URL -> slug derivation (no network) so it's unit-testable: takes the
 // last non-empty path segment of the configured discover page URL (e.g.
 // https://luma.com/austin -> "austin"). Falls back to null for an
-// unparseable or path-less URL rather than throwing.
+// unparseable or path-less URL rather than throwing. Only used as the
+// fallback geo param when place-id resolution fails.
 export function slugFromUrl(pageUrl: string): string | null {
   try {
     const segments = new URL(pageUrl).pathname.split('/').filter(Boolean)
@@ -143,9 +155,46 @@ export function slugFromUrl(pageUrl: string): string | null {
   }
 }
 
-async function fetchPage(slug: string, cursor: string | null): Promise<LumaPage | null> {
+// Pure __NEXT_DATA__ JSON -> place id extraction (no network), so it's
+// unit-testable without mocking fetch.
+export function placeApiIdFromNextData(data: unknown): string | null {
+  const apiId = (data as { props?: { pageProps?: { initialData?: { data?: { place?: { api_id?: unknown } } } } } })
+    ?.props?.pageProps?.initialData?.data?.place?.api_id
+  return typeof apiId === 'string' ? apiId : null
+}
+
+// Fetches the discover page's HTML once to read its embedded place.api_id —
+// the id that unlocks the full paginated search (see module comment). Not
+// itself the event data; just a one-time lookup per city.
+async function resolvePlaceApiId(pageUrl: string): Promise<string | null> {
+  let html: string
+  try {
+    const res = await fetch(pageUrl, {
+      headers: { 'User-Agent': UA, Accept: 'text/html' },
+      signal: AbortSignal.timeout(20000),
+      cache: 'no-store',
+    })
+    if (!res.ok) return null
+    html = await res.text()
+  } catch (e) {
+    console.error(`Luma place-id fetch failed for ${pageUrl}:`, e)
+    return null
+  }
+
+  const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)
+  if (!m) return null
+
+  try {
+    return placeApiIdFromNextData(JSON.parse(m[1]))
+  } catch (e) {
+    console.error(`Luma __NEXT_DATA__ parse failed for ${pageUrl}:`, e)
+    return null
+  }
+}
+
+async function fetchPage(geoParam: [string, string], cursor: string | null): Promise<LumaPage | null> {
   const u = new URL('https://api.lu.ma/discover/get-paginated-events')
-  u.searchParams.set('slug', slug)
+  u.searchParams.set(...geoParam)
   if (cursor) u.searchParams.set('pagination_cursor', cursor)
 
   try {
@@ -163,13 +212,15 @@ async function fetchPage(slug: string, cursor: string | null): Promise<LumaPage 
 }
 
 export async function fetchLumaEvents(url: string, source: string): Promise<RawEvent[]> {
+  const placeApiId = await resolvePlaceApiId(url)
   const slug = slugFromUrl(url)
-  if (!slug) return []
+  const geoParam: [string, string] | null = placeApiId ? ['place_api_id', placeApiId] : slug ? ['slug', slug] : null
+  if (!geoParam) return []
 
   const merged: unknown[] = []
   let cursor: string | null = null
   for (let page = 0; page < MAX_PAGES; page++) {
-    const data = await fetchPage(slug, cursor)
+    const data = await fetchPage(geoParam, cursor)
     if (!data) break
     if (Array.isArray(data.entries)) merged.push(...data.entries)
     if (!data.has_more || typeof data.next_cursor !== 'string') break

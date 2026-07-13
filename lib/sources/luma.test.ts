@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { eventsFromEntries, slugFromUrl } from './luma'
+import { eventsFromEntries, slugFromUrl, placeApiIdFromNextData } from './luma'
 
 function entry(overrides: Record<string, unknown> = {}, ticketOverrides: Record<string, unknown> | null = {}) {
   return {
@@ -33,6 +33,31 @@ describe('slugFromUrl', () => {
 
   it('returns null for an unparseable URL', () => {
     expect(slugFromUrl('not a url')).toBeNull()
+  })
+})
+
+describe('placeApiIdFromNextData', () => {
+  function nextData(placeOverrides: Record<string, unknown> | undefined) {
+    return { props: { pageProps: { initialData: { data: placeOverrides === undefined ? {} : { place: placeOverrides } } } } }
+  }
+
+  it('extracts place.api_id from the discover page payload', () => {
+    expect(placeApiIdFromNextData(nextData({ api_id: 'discplace-abc123' }))).toBe('discplace-abc123')
+  })
+
+  it('returns null when place is missing', () => {
+    expect(placeApiIdFromNextData(nextData(undefined))).toBeNull()
+  })
+
+  it('returns null when api_id is not a string', () => {
+    expect(placeApiIdFromNextData(nextData({ api_id: 12345 }))).toBeNull()
+  })
+
+  it('returns null for a malformed payload', () => {
+    expect(placeApiIdFromNextData(null)).toBeNull()
+    expect(placeApiIdFromNextData(undefined)).toBeNull()
+    expect(placeApiIdFromNextData('not an object')).toBeNull()
+    expect(placeApiIdFromNextData({})).toBeNull()
   })
 })
 

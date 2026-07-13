@@ -77,8 +77,10 @@ export const PARSERS: Record<string, SourceParser> = {
   meetup: simple(() => true, (url, name) => fetchMeetupEvents(url!, name)),
 
   // luma.com/<city-slug>: public, unauthenticated JSON API behind the
-  // discover page, cursor-paginated, no Gemini. `url` is the human discover
-  // page (e.g. https://luma.com/austin); the parser derives the slug from it.
+  // discover page. `url` is the human discover page (e.g.
+  // https://luma.com/austin); the parser resolves its place_api_id and
+  // paginates the full geo-search on it (much bigger than the page's own
+  // capped "Popular events" feed), no Gemini.
   luma: simple(() => true, (url, name) => fetchLumaEvents(url!, name)),
 
   // Crawl: content-hash aware, returns its own skip flag.
