@@ -13,6 +13,7 @@ import { fetchPartifulEvents } from './partiful'
 import { fetchSimpleviewEvents } from './simpleview'
 import { fetchCultureMapEvents } from './culturemap'
 import { fetchMeetupEvents } from './meetup'
+import { fetchLumaEvents } from './luma'
 import { extractEvents } from '@/lib/extractor'
 
 const has = (v: string | undefined): boolean => !!v && v.length > 0
@@ -74,6 +75,11 @@ export const PARSERS: Record<string, SourceParser> = {
   // a full Apollo GraphQL cache of the search results, no Gemini. `url` is
   // the find-page URL (location/filters baked in).
   meetup: simple(() => true, (url, name) => fetchMeetupEvents(url!, name)),
+
+  // luma.com/<city-slug>: public, unauthenticated JSON API behind the
+  // discover page, cursor-paginated, no Gemini. `url` is the human discover
+  // page (e.g. https://luma.com/austin); the parser derives the slug from it.
+  luma: simple(() => true, (url, name) => fetchLumaEvents(url!, name)),
 
   // Crawl: content-hash aware, returns its own skip flag.
   crawl: {
