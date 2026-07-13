@@ -14,6 +14,7 @@ import { fetchSimpleviewEvents } from './simpleview'
 import { fetchCultureMapEvents } from './culturemap'
 import { fetchMeetupEvents } from './meetup'
 import { fetchLumaEvents } from './luma'
+import { fetchMeanwhileEvents } from './meanwhile'
 import { extractEvents } from '@/lib/extractor'
 
 const has = (v: string | undefined): boolean => !!v && v.length > 0
@@ -82,6 +83,12 @@ export const PARSERS: Record<string, SourceParser> = {
   // paginates the full geo-search on it (much bigger than the page's own
   // capped "Popular events" feed), no Gemini.
   luma: simple(() => true, (url, name) => fetchLumaEvents(url!, name)),
+
+  // meanwhilebeer.com/events: static server-rendered Webflow CMS collection
+  // list, no Gemini. `url` is the events index page; the parser follows the
+  // list's own "Next" pagination link to exhaustion and captures each item's
+  // event-specific flyer image from its `background-image` style.
+  meanwhile: simple(() => true, (url, name) => fetchMeanwhileEvents(url!, name)),
 
   // Crawl: content-hash aware, returns its own skip flag.
   crawl: {
