@@ -23,7 +23,7 @@ type PartifulEvent = {
     mapsInfo?: { name?: string; addressLines?: string[] }
     displayAddressLines?: string[]
   }
-  image?: { url?: string }
+  image?: { upload?: { path?: string } }
 }
 
 function isPartifulEvent(v: unknown): v is PartifulEvent {
@@ -54,6 +54,16 @@ function addressOf(loc: PartifulEvent['locationInfo']): string | null {
   return lines && lines.length > 0 ? lines.join(', ') : null
 }
 
+// __NEXT_DATA__'s event.image.url/upload.url point straight at a Firebase
+// Storage object with no download token — that URL 403s (verified live)
+// rather than serving the image. Partiful's own frontend never renders that
+// URL either: it serves images through their imgix CDN at image.upload.path,
+// which is publicly readable. Build that same URL instead.
+function imageUrlOf(image: PartifulEvent['image']): string | null {
+  const path = image?.upload?.path
+  return path ? `https://partiful.imgix.net/${path}` : null
+}
+
 function toIso(raw: string | undefined): string | null {
   if (!raw) return null
   const d = new Date(raw)
@@ -70,7 +80,7 @@ function toRawEvent(ev: PartifulEvent, source: string): RawEvent | null {
     end_time: toIso(ev.endDate),
     venue_name: ev.locationInfo?.mapsInfo?.name ?? null,
     venue_address: addressOf(ev.locationInfo),
-    image_url: ev.image?.url ?? null,
+    image_url: imageUrlOf(ev.image),
     ticket_url: `https://partiful.com/e/${ev.id}`,
     source,
     source_id: ev.id,

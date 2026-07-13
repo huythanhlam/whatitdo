@@ -70,7 +70,10 @@ export function toIso(raw: string | undefined): string | null {
 // Recursively collect every schema.org Event node from a parsed JSON-LD value,
 // and separately every bare item-list URL (position/url pairs with no
 // embedded `item`) so pages that only link out to per-event detail pages can
-// be followed up one level.
+// be followed up one level. Walks every object property generically (not just
+// the standard @graph/itemListElement wrappers) — e.g. capcitycomedy.com nests
+// its full Event array under a non-standard Place.Events key, and there's no
+// reason to special-case every such quirk when a generic walk finds it too.
 function collect(node: unknown, events: LdEvent[], urls: Set<string>): void {
   if (Array.isArray(node)) {
     for (const n of node) collect(n, events, urls)
@@ -79,17 +82,26 @@ function collect(node: unknown, events: LdEvent[], urls: Set<string>): void {
   if (!node || typeof node !== 'object') return
   const obj = node as Record<string, unknown>
   const type = obj['@type']
-  if (type === 'Event' || (Array.isArray(type) && type.includes('Event'))) events.push(obj as LdEvent)
+  if (type === 'Event' || (Array.isArray(type) && type.includes('Event'))) {
+    events.push(obj as LdEvent)
+    return
+  }
 
-  if (obj['@graph']) collect(obj['@graph'], events, urls)
-
-  const list = obj['itemListElement']
-  if (Array.isArray(list)) {
-    for (const entry of list) {
-      const e = entry as Record<string, unknown>
-      if (e?.item) collect(e.item, events, urls)
-      else if (typeof e?.url === 'string') urls.add(e.url)
+  for (const [key, v] of Object.entries(obj)) {
+    // itemListElement entries need their own handling (a bare {position,url}
+    // with no embedded `item` carries a URL, not a node) — handle it here and
+    // skip it in the generic walk below so a ListItem's Event doesn't get
+    // collected twice (once via `.item`, once via the generic recursion into
+    // the same array's objects).
+    if (key === 'itemListElement' && Array.isArray(v)) {
+      for (const entry of v) {
+        const e = entry as Record<string, unknown>
+        if (e?.item) collect(e.item, events, urls)
+        else if (typeof e?.url === 'string') urls.add(e.url)
+      }
+      continue
     }
+    collect(v, events, urls)
   }
 }
 

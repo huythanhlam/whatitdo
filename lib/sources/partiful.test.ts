@@ -21,7 +21,7 @@ describe('eventsFromNextData', () => {
               endDate: '2026-07-11T21:30:00.000Z',
               isPublic: true,
               locationInfo: { mapsInfo: { name: 'Pflugerville Library', addressLines: ['1008 W Pfluger St', 'Pflugerville, TX'] } },
-              image: { url: 'https://example.com/img.png' },
+              image: { upload: { path: 'external/user/abc/img123' } },
             },
           },
         ],
@@ -37,7 +37,38 @@ describe('eventsFromNextData', () => {
       ticket_url: 'https://partiful.com/e/abc123',
       source: 'crawl:partiful-com',
       source_id: 'abc123',
+      image_url: 'https://partiful.imgix.net/external/user/abc/img123',
     })
+  })
+
+  it('builds the imgix CDN URL from image.upload.path, not the unusable raw Firebase Storage url', () => {
+    // event.image.url / image.upload.url point at a Firebase Storage object with
+    // no download token — that URL 403s. Only image.upload.path (served through
+    // Partiful's imgix CDN) is actually publicly fetchable.
+    const data = pageProps({
+      feedItems: [{
+        event: {
+          id: 'imgtest', title: 'Image Test', startDate: '2026-07-11T15:00:00.000Z',
+          image: {
+            url: 'https://firebasestorage.googleapis.com/v0/b/getpartiful.appspot.com/o/external%2Fuser%2Fabc%2Fimg123?alt=media',
+            upload: {
+              path: 'external/user/abc/img123',
+              url: 'https://firebasestorage.googleapis.com/v0/b/getpartiful.appspot.com/o/external%2Fuser%2Fabc%2Fimg123?alt=media',
+            },
+          },
+        },
+      }],
+    })
+    const events = eventsFromNextData(data, 'crawl:partiful-com')
+    expect(events[0].image_url).toBe('https://partiful.imgix.net/external/user/abc/img123')
+  })
+
+  it('leaves image_url null when the event has no image', () => {
+    const data = pageProps({
+      feedItems: [{ event: { id: 'noimg', title: 'No Image Event', startDate: '2026-07-11T15:00:00.000Z' } }],
+    })
+    const events = eventsFromNextData(data, 'crawl:partiful-com')
+    expect(events[0].image_url).toBeNull()
   })
 
   it('finds events regardless of which section they are nested under', () => {

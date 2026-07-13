@@ -83,9 +83,23 @@ describe('mergeFields', () => {
     const p = mergeFields({ ...base, venue_name: null, venue_norm: null }, { ...raw(), venue_name: 'Mohawk' })
     expect(p).toMatchObject({ venue_name: 'Mohawk', venue_norm: 'mohawk' })
   })
-  it('fills a missing image but does not overwrite an existing one', () => {
+  it('fills a missing image but does not overwrite an existing one from an equal/lower-trust source', () => {
     expect(mergeFields(base, { ...raw(), image_url: 'http://img' })?.image_url).toBe('http://img')
     expect(mergeFields({ ...base, image_url: 'http://have' }, { ...raw(), image_url: 'http://new' })?.image_url).toBeUndefined()
+  })
+  it('a higher-trust source upgrades an existing image (e.g. a crawl-tier fallback photo)', () => {
+    const p = mergeFields(
+      { ...base, image_url: 'http://fallback-stock-photo' },
+      { ...raw(), source: 'ticketmaster', image_url: 'http://real-photo' }
+    )
+    expect(p?.image_url).toBe('http://real-photo')
+  })
+  it('a lower-trust source does not downgrade an existing higher-trust image', () => {
+    const p = mergeFields(
+      { ...base, source: 'ticketmaster', image_url: 'http://real-photo' },
+      { ...raw(), source: 'crawl', image_url: 'http://generic-photo' }
+    )
+    expect(p?.image_url).toBeUndefined()
   })
   it('widens the price range', () => {
     const p = mergeFields({ ...base, price_min: 20, price_max: 30 }, { ...raw(), price_min: 10, price_max: 50 })
