@@ -35,12 +35,19 @@ const KNOWN_PROVIDERS: { match: string[]; name: string }[] = [
 export function getTicketProvider(ticketUrl: string | null | undefined): TicketProvider | null {
   if (!ticketUrl) return null
 
-  let host: string
+  let url: URL
   try {
-    host = new URL(ticketUrl).hostname.toLowerCase()
+    url = new URL(ticketUrl)
   } catch {
     return null
   }
+  // Defense in depth: lib/persist.ts already strips non-http(s) URLs before
+  // storage, but every render site (EventCard, the event detail page) gates
+  // its ticket-link <a href> on this function returning non-null, so reject
+  // javascript:/data:/etc. here too rather than relying solely on the
+  // ingestion-time sanitizer.
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
+  const host = url.hostname.toLowerCase()
 
   for (const provider of KNOWN_PROVIDERS) {
     if (provider.match.some(m => host.includes(m))) {

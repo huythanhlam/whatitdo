@@ -10,6 +10,7 @@ import {
 import { normalizeTitle, normalizeVenue } from '@/lib/normalize'
 import { chooseMatch, mergeFields } from '@/lib/dedup'
 import { ensureVenueGeocoded } from '@/lib/geocode'
+import { httpOrNull } from '@/lib/html'
 import type { RawEvent } from '@/lib/sources/types'
 import type { CategorySlug } from '@/lib/categories'
 
@@ -46,7 +47,18 @@ export async function persistEvents(
   const total = input.length
   if (total === 0) return { inserted: 0, skipped: 0, rejected: 0, total: 0 }
 
-  const events = input.filter(isValidEvent)
+  // Sanitize before anything else touches these fields: every source (API,
+  // RSS/iCal, JSON-LD scraping, the Gemini crawler/importer, public
+  // submissions) funnels through this one function, so this is the single
+  // choke point that guarantees a non-http(s) URL (javascript:, data:, etc.)
+  // from a scraped or submitted page can never reach the DB — and, from
+  // there, an unescaped href/src on the public site (stored XSS).
+  const sanitized = input.map(e => ({
+    ...e,
+    ticket_url: httpOrNull(e.ticket_url),
+    image_url: httpOrNull(e.image_url),
+  }))
+  const events = sanitized.filter(isValidEvent)
   const rejected = total - events.length
   if (events.length === 0) return { inserted: 0, skipped: 0, rejected, total }
 
