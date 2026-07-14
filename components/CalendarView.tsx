@@ -157,7 +157,7 @@ function DayCellView({ cell, events, basePath }: { cell: DayCell; events: Enrich
 }
 
 function EventChip({ event, basePath }: { event: EnrichedEvent; basePath: string }) {
-  const color = event.categories?.[0]?.color ?? '#C1502E'
+  const color = event.categories?.[0]?.color ?? '#F17A7E'
   const time = new Date(event.start_time).toLocaleTimeString('en-US', {
     hour: 'numeric',
     minute: '2-digit',

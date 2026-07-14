@@ -4,7 +4,7 @@ import { escapeHtml } from '@/lib/html'
 
 function htmlPage(body: string): NextResponse {
   return new NextResponse(
-    `<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:420px;margin:80px auto;text-align:center;color:#3B2A20">${body}</body></html>`,
+    `<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:420px;margin:80px auto;text-align:center;color:#4A6163">${body}</body></html>`,
     { headers: { 'Content-Type': 'text/html' } }
   )
 }
@@ -21,9 +21,9 @@ export async function GET(req: NextRequest) {
     `<h2>Unsubscribe?</h2>
      <p>Stop receiving Austin events emails?</p>
      <form method="POST" action="${escapeHtml(action)}">
-       <button type="submit" style="background:#C1502E;color:#fff;border:none;padding:10px 20px;border-radius:6px;font-size:14px;cursor:pointer">Yes, unsubscribe</button>
+       <button type="submit" style="background:#F17A7E;color:#fff;border:none;padding:10px 20px;border-radius:6px;font-size:14px;cursor:pointer">Yes, unsubscribe</button>
      </form>
-     <p style="margin-top:16px"><a href="/" style="color:#C1502E">No, keep me subscribed</a></p>`
+     <p style="margin-top:16px"><a href="/" style="color:#F17A7E">No, keep me subscribed</a></p>`
   )
 }
 
@@ -39,6 +39,6 @@ export async function POST(req: NextRequest) {
   return htmlPage(
     `<h2>Unsubscribed ✓</h2>
      <p>If that subscription existed, it's been removed from the Austin events list.</p>
-     <a href="/" style="color:#C1502E">Back to events</a>`
+     <a href="/" style="color:#F17A7E">Back to events</a>`
   )
 }

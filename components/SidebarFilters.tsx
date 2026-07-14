@@ -4,6 +4,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { CATEGORIES } from '@/lib/categories'
+import { readableTextColor } from '@/lib/utils'
 
 export function SidebarFilters({ compact = false }: { compact?: boolean }) {
   const router = useRouter()
@@ -41,9 +42,9 @@ export function SidebarFilters({ compact = false }: { compact?: boolean }) {
               key={cat.slug}
               onClick={() => toggle(cat.slug)}
               className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap border transition-colors flex items-center gap-1.5 ${
-                on ? 'text-white border-transparent' : 'bg-background text-muted-foreground border-border'
+                on ? 'border-transparent' : 'bg-background text-muted-foreground border-border'
               }`}
-              style={on ? { backgroundColor: cat.color } : undefined}
+              style={on ? { backgroundColor: cat.color, color: readableTextColor(cat.color) } : undefined}
             >
               {!on && <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: cat.color }} />}
               {cat.name}

@@ -1,10 +1,19 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Onest, Unbounded } from "next/font/google";
 import { getBaseUrl } from "@/lib/site";
 import "./globals.css";
 
-const inter = Inter({
-  variable: "--font-inter",
+// Warm, rounded grotesk for body/UI text — a distinctive Inter alternative
+// that still holds up at small sizes in dense filter rows and event cards.
+const onest = Onest({
+  variable: "--font-onest",
+  subsets: ["latin"],
+});
+
+// Blocky, geometric display face for headlines/wordmark — matches the bold
+// poster-color palette instead of receding into a generic system sans.
+const unbounded = Unbounded({
+  variable: "--font-unbounded",
   subsets: ["latin"],
 });
 
@@ -42,7 +51,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} h-full antialiased`}
+      className={`${onest.variable} ${unbounded.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

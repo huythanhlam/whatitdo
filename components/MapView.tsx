@@ -19,7 +19,7 @@ function infoWindowContent(event: EnrichedEvent, basePath: string): string {
   const provider = getTicketProvider(event.ticket_url)
   const ticketUrl = safeUrl(event.ticket_url)
   const ticketLink = provider && ticketUrl
-    ? `<a href="${ticketUrl}" target="_blank" rel="noopener noreferrer" style="color:#C1502E;font-weight:600;">🎟 ${escapeHtml(provider.cta)} →</a>`
+    ? `<a href="${ticketUrl}" target="_blank" rel="noopener noreferrer" style="color:#F17A7E;font-weight:600;">🎟 ${escapeHtml(provider.cta)} →</a>`
     : ''
 
   // Rendered via InfoWindow's `content` (raw HTML string, Google Maps' own
@@ -29,9 +29,9 @@ function infoWindowContent(event: EnrichedEvent, basePath: string): string {
   // HTML email digest.
   return `
     <div style="max-width:220px;font-family:inherit;">
-      <a href="${basePath}/events/${event.id}" style="font-weight:600;color:#3B2A20;text-decoration:none;">${escapeHtml(event.title)}</a>
-      <p style="margin:4px 0 0;font-size:12px;color:#8A6B4D;">📅 ${dateStr} · ${timeStr}</p>
-      ${event.venue_name ? `<p style="margin:2px 0 0;font-size:12px;color:#8A6B4D;">📍 ${escapeHtml(event.venue_name)}</p>` : ''}
+      <a href="${basePath}/events/${event.id}" style="font-weight:600;color:#4A6163;text-decoration:none;">${escapeHtml(event.title)}</a>
+      <p style="margin:4px 0 0;font-size:12px;color:#7C9092;">📅 ${dateStr} · ${timeStr}</p>
+      ${event.venue_name ? `<p style="margin:2px 0 0;font-size:12px;color:#7C9092;">📍 ${escapeHtml(event.venue_name)}</p>` : ''}
       ${ticketLink ? `<p style="margin:6px 0 0;font-size:12px;">${ticketLink}</p>` : ''}
     </div>
   `
