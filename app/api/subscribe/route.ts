@@ -5,10 +5,22 @@ import { addSubscription, getCityBySlug, getDistinctNeighborhoods } from '@/lib/
 import { escapeHtml } from '@/lib/html'
 import { getBaseUrl } from '@/lib/site'
 import { EMAIL_FROM } from '@/lib/email/digest'
+import { checkRateLimit, clientIp } from '@/lib/rateLimit'
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
 
+// 5/hour/IP — same budget as /api/submissions. Public and unauthenticated by
+// design (no accounts), so without a limit it's an open mailer: unlimited
+// "confirm your subscription" emails to any address on demand (harassment,
+// and it burns the Resend send quota other subscribers depend on).
+const SUBSCRIBE_MAX = 5
+const SUBSCRIBE_WINDOW_MS = 60 * 60 * 1000
+
 export async function POST(req: NextRequest) {
+  if (!checkRateLimit(`subscribe:${clientIp(req)}`, SUBSCRIBE_MAX, SUBSCRIBE_WINDOW_MS)) {
+    return NextResponse.json({ error: 'Too many subscription attempts from this address — please try again later.' }, { status: 429 })
+  }
+
   let body: { email?: unknown; frequency?: unknown; category_slugs?: unknown; city?: unknown; free_only?: unknown; neighborhoods?: unknown }
   try {
     body = await req.json()

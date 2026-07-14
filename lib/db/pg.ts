@@ -19,10 +19,16 @@ function pool(): Pool {
     // typically does not. Enable SSL unless the connection is clearly local or
     // explicitly disabled.
     const local = /localhost|127\.0\.0\.1|sslmode=disable/.test(connectionString)
+    // rejectUnauthorized defaults to true (verify the pooler's certificate
+    // chain, as Supavisor's public CA-signed cert supports) — disabling it
+    // would accept ANY certificate, letting a network-level attacker
+    // impersonate the database and read/tamper with every query, including
+    // subscriber emails and admin actions. DATABASE_SSL_INSECURE is an
+    // explicit, opt-in escape hatch for self-signed-cert deployments only.
     globalForPg.__pgPool = new Pool({
       connectionString,
       max: 5,
-      ssl: local ? undefined : { rejectUnauthorized: false },
+      ssl: local ? undefined : { rejectUnauthorized: process.env.DATABASE_SSL_INSECURE !== 'true' },
     })
   }
   return globalForPg.__pgPool

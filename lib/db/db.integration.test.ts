@@ -135,6 +135,30 @@ describe('persistEvents against PGlite', () => {
     const found = await listEvents({ cityId: 1, q: 'Integration Test Show', limit: 5, offset: 0 })
     expect(found.some(e => e.source_id === 'itest-good')).toBe(true)
   })
+
+  it('strips a non-http(s) ticket_url/image_url instead of persisting it (stored-XSS defense)', async () => {
+    // A scraped/submitted event's ticket_url and image_url are rendered
+    // directly as href/src on the public site (components/EventCard.tsx,
+    // app/[city]/events/[id]/page.tsx) — a javascript:/data: scheme reaching
+    // the DB here would be stored XSS against every visitor who clicks the
+    // ticket link. persistEvents is the one choke point every source (API,
+    // RSS/iCal, JSON-LD scraping, crawler, submissions) funnels through, so
+    // asserting it here covers all of them.
+    const e = mk({
+      source_id: 'itest-xss-url',
+      title: 'XSS URL Test Show',
+      ticket_url: 'javascript:alert(document.cookie)',
+      image_url: 'data:text/html,<script>alert(1)</script>',
+    })
+    const res = await persistEvents([e])
+    expect(res.inserted).toBe(1)
+
+    const [found] = await listEvents({ cityId: 1, q: 'XSS URL Test Show', limit: 5, offset: 0 })
+    expect(found.ticket_url).toBeNull()
+    // image_url falls back to a category stock photo rather than staying
+    // null, but it must never be the malicious data: URL.
+    expect(found.image_url).not.toBe('data:text/html,<script>alert(1)</script>')
+  })
 })
 
 describe('persistEvents opts defaulting', () => {

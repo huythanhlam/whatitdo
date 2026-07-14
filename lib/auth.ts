@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { timingSafeEqual } from 'node:crypto'
 
 // Fail-closed bearer auth for mutation / cron endpoints (ingest, import,
 // featured, email digest).
@@ -24,9 +25,26 @@ export function requireCronAuth(req: NextRequest): NextResponse | null {
     )
   }
 
-  if (req.headers.get('authorization') !== `Bearer ${secret}`) {
+  const presented = req.headers.get('authorization') ?? ''
+  if (!constantTimeEqual(presented, `Bearer ${secret}`)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   return null
+}
+
+// A plain `!==` short-circuits on the first mismatching byte, so response
+// time leaks how many leading characters of CRON_SECRET a guess got right —
+// a timing side channel against a single, shared, high-privilege secret that
+// guards every mutation/cron/admin route. timingSafeEqual requires equal
+// lengths, so pad both sides to a fixed size first (this leaks only that the
+// unpadded lengths differ up to that size, not which byte, which is the
+// standard mitigation for comparing variable-length attacker input).
+function constantTimeEqual(a: string, b: string): boolean {
+  const size = Math.max(a.length, b.length, 1)
+  const bufA = Buffer.alloc(size)
+  const bufB = Buffer.alloc(size)
+  bufA.write(a)
+  bufB.write(b)
+  return timingSafeEqual(bufA, bufB) && a.length === b.length
 }

@@ -21,3 +21,18 @@ export function safeUrl(input: unknown): string {
   if (!/^https?:\/\//i.test(raw)) return ''
   return escapeHtml(raw)
 }
+
+// Validate a scraped/submitted URL is absolute http(s) (never javascript:,
+// data:, vbscript:, etc.), without HTML-escaping — for sanitizing values
+// before they're stored, as opposed to safeUrl's use at HTML-interpolation
+// time. Returns the original string unchanged, or null if it isn't a usable
+// http(s) URL.
+export function httpOrNull(input: string | null | undefined): string | null {
+  if (!input) return null
+  try {
+    const u = new URL(input)
+    return u.protocol === 'http:' || u.protocol === 'https:' ? input : null
+  } catch {
+    return null
+  }
+}
