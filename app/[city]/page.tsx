@@ -1,6 +1,6 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
-import { MapPin, ArrowRight } from 'lucide-react'
+import { MapPin, ArrowRight, Bell } from 'lucide-react'
 import { SearchBar } from '@/components/SearchBar'
 import { SidebarFilters } from '@/components/SidebarFilters'
 import { SourceFilter } from '@/components/SourceFilter'
@@ -182,40 +182,49 @@ export default async function CityHomePage({
     <div className="min-h-screen bg-background">
       <header className="border-b border-border sticky top-0 z-40 bg-card/95 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3">
-          <Link href={base} className="flex items-center gap-2 shrink-0">
+          <Link href={base} className="order-1 flex items-center gap-2 shrink-0">
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-lg">🎉</span>
             <span className="font-display text-lg sm:text-xl font-semibold tracking-tight text-foreground whitespace-nowrap">
               Whats Happenin
             </span>
           </Link>
-          <span className="hidden lg:inline-flex items-center gap-1 text-sm font-medium text-muted-foreground border-l border-border pl-4">
+          <span className="order-2 hidden lg:inline-flex items-center gap-1 text-sm font-medium text-muted-foreground border-l border-border pl-4">
             <MapPin className="w-3.5 h-3.5" /> {city.name}, {city.state}
           </span>
+          {/* Full-width on mobile so it wraps to its own row below the logo
+              instead of squeezing into the same row as the header CTAs. */}
+          <div className="order-3 w-full sm:w-auto sm:flex-1 sm:max-w-xl">
+            <Suspense fallback={<div className="h-11 bg-muted rounded-md animate-pulse" />}>
+              <SearchBar />
+            </Suspense>
+          </div>
           <Link
             href={`${base}/submit`}
             className="hidden sm:inline order-4 shrink-0 text-sm text-muted-foreground hover:text-primary font-medium"
           >
             Submit an event
           </Link>
+          {/* Get Updates drops out of the header entirely below sm — cramming a
+              4th element in next to the logo made the row wrap awkwardly. It
+              still gets top billing as a CTA in the hero below. */}
           <Link
             href={`${base}/subscribe`}
-            className="order-2 sm:order-5 ml-auto sm:ml-0 shrink-0 text-sm bg-primary text-primary-foreground px-3.5 py-2 sm:px-4 rounded-full hover:bg-primary/90 transition-colors font-semibold"
+            className="hidden sm:inline-flex order-5 shrink-0 items-center h-11 text-sm bg-primary text-primary-foreground px-4 rounded-full hover:bg-primary/90 transition-colors font-semibold"
           >
             Get Updates
           </Link>
-          {/* Full-width on mobile so it wraps to its own row instead of
-              squeezing down to an unusable sliver next to the logo/CTA. */}
-          <div className="order-5 sm:order-3 w-full sm:w-auto sm:flex-1 sm:max-w-xl">
-            <Suspense fallback={<div className="h-9 bg-muted rounded-md animate-pulse" />}>
-              <SearchBar />
-            </Suspense>
-          </div>
         </div>
       </header>
 
       {/* Hero — headline, search CTAs, and a rotating showcase of what's coming
           up, in the spirit of Meetup/Eventbrite's home hero. */}
-      <section className="relative overflow-hidden border-b border-border">
+      {/* overflow-clip, not overflow-hidden: the -right-16 blob below genuinely
+          extends past this box, and overflow-hidden (unlike clip) makes an
+          element scrollable — HeroCarousel's scrollIntoView() calls were then
+          free to scroll *this* section a few px sideways, eating the left
+          padding on mobile. clip still hides the bleed without the scroll
+          container side effect. */}
+      <section className="relative overflow-clip border-b border-border">
         <div
           aria-hidden
           className="pointer-events-none absolute -top-32 -left-24 h-96 w-96 rounded-full opacity-40 blur-3xl"
@@ -250,6 +259,15 @@ export default async function CityHomePage({
                 className="inline-flex items-center rounded-full border border-border bg-card px-6 py-3 text-sm font-semibold text-foreground hover:border-primary hover:text-primary transition-colors"
               >
                 This Weekend
+              </Link>
+              {/* Mirrors the header's Get Updates CTA, which hides below sm —
+                  no room for a 4th element next to the logo/search there, so
+                  it surfaces here instead rather than disappearing outright. */}
+              <Link
+                href={`${base}/subscribe`}
+                className="sm:hidden inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-6 py-3 text-sm font-semibold text-foreground hover:border-primary hover:text-primary transition-colors"
+              >
+                <Bell className="w-3.5 h-3.5" /> Get Updates
               </Link>
               <Link
                 href={`${base}/submit`}
@@ -288,7 +306,7 @@ export default async function CityHomePage({
         <main id="events" className="flex-1 min-w-0 scroll-mt-20">
           <div className="flex items-center justify-between gap-3 mb-4">
             <h2 className="text-lg font-semibold text-foreground">{city.name} Events</h2>
-            <Suspense fallback={<div className="h-9 w-32 bg-muted rounded-lg animate-pulse" />}>
+            <Suspense fallback={<div className="h-11 sm:h-9 w-24 sm:w-32 bg-muted rounded-lg animate-pulse" />}>
               <ViewToggle />
             </Suspense>
           </div>
@@ -317,7 +335,7 @@ export default async function CityHomePage({
             </Suspense>
           ) : view === 'map' ? (
             <>
-              <Suspense fallback={<div className="h-9 bg-muted rounded-md animate-pulse mb-5" />}>
+              <Suspense fallback={<div className="h-11 bg-muted rounded-md animate-pulse mb-5" />}>
                 <DateFilter />
               </Suspense>
               <Suspense fallback={<div className="h-[600px] bg-muted rounded-lg animate-pulse" />}>
@@ -326,7 +344,7 @@ export default async function CityHomePage({
             </>
           ) : (
             <>
-              <Suspense fallback={<div className="h-9 bg-muted rounded-md animate-pulse mb-5" />}>
+              <Suspense fallback={<div className="h-11 bg-muted rounded-md animate-pulse mb-5" />}>
                 <DateFilter />
               </Suspense>
               <Suspense fallback={

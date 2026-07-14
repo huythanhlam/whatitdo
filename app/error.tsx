@@ -26,7 +26,7 @@ export default function Error({
         </p>
         <button
           onClick={() => unstable_retry()}
-          className="text-sm bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90 transition-colors font-medium"
+          className="h-11 text-sm bg-primary text-primary-foreground px-5 rounded-md hover:bg-primary/90 transition-colors font-medium"
         >
           Try again
         </button>

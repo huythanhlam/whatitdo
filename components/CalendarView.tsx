@@ -63,24 +63,24 @@ export function CalendarView({
           <Link
             href={monthHref(prev.year, prev.month, filterQs, basePath)}
             aria-label="Previous month"
-            className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-primary transition-colors"
+            className="flex items-center justify-center w-10 h-10 rounded-md text-muted-foreground hover:bg-muted hover:text-primary transition-colors"
           >
             <ChevronLeft className="w-5 h-5" />
           </Link>
-          <h2 className="text-base font-semibold text-foreground min-w-[10rem] text-center">
+          <h2 className="text-base font-semibold text-foreground min-w-[9rem] sm:min-w-[10rem] text-center">
             {MONTH_LABELS[month]} {year}
           </h2>
           <Link
             href={monthHref(next.year, next.month, filterQs, basePath)}
             aria-label="Next month"
-            className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-primary transition-colors"
+            className="flex items-center justify-center w-10 h-10 rounded-md text-muted-foreground hover:bg-muted hover:text-primary transition-colors"
           >
             <ChevronRight className="w-5 h-5" />
           </Link>
         </div>
         <Link
           href={monthHref(today.year, today.month, filterQs, basePath)}
-          className="text-sm font-medium text-primary hover:text-primary/90 px-2.5 py-1 rounded-md hover:bg-accent transition-colors"
+          className="flex items-center text-sm font-medium text-primary hover:text-primary/90 px-3 h-10 rounded-md hover:bg-accent transition-colors"
         >
           Today
         </Link>
@@ -146,7 +146,7 @@ function DayCellView({ cell, events, basePath }: { cell: DayCell; events: Enrich
         {extra > 0 && (
           <Link
             href={`${basePath}?from=${cell.key}&to=${cell.key}`}
-            className="text-[11px] text-primary hover:text-primary/90 hover:underline px-1"
+            className="text-xs text-primary hover:text-primary/90 hover:underline px-1 py-0.5"
           >
             +{extra} more
           </Link>
@@ -168,7 +168,7 @@ function EventChip({ event, basePath }: { event: EnrichedEvent; basePath: string
     <Link
       href={`${basePath}/events/${event.id}`}
       title={`${time} · ${event.title}`}
-      className="group block rounded px-1 py-0.5 text-[11px] leading-tight truncate hover:brightness-95 transition"
+      className="group block rounded px-1.5 py-1 text-xs leading-tight truncate hover:brightness-95 transition"
       style={{ backgroundColor: color + '18', color }}
     >
       <span className="font-medium tabular-nums">{time}</span>{' '}

@@ -48,7 +48,7 @@ export function DateFilter() {
   }
 
   const pill = (active: boolean) =>
-    `px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap border ${
+    `px-4 py-2.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap border ${
       active
         ? 'bg-primary text-primary-foreground border-primary'
         : 'bg-card text-muted-foreground border-border hover:border-primary hover:text-primary'
@@ -73,7 +73,11 @@ export function DateFilter() {
           {customActive ? `${from ?? '…'} – ${to ?? '…'}` : 'Custom'}
         </button>
         {customActive && (
-          <button onClick={clearCustom} className="text-muted-foreground hover:text-foreground shrink-0" aria-label="Clear date range">
+          <button
+            onClick={clearCustom}
+            className="flex items-center justify-center w-9 h-9 shrink-0 text-muted-foreground hover:text-foreground"
+            aria-label="Clear date range"
+          >
             <X className="w-4 h-4" />
           </button>
         )}
@@ -86,7 +90,7 @@ export function DateFilter() {
             <input
               id="date-from" type="date" value={fromVal}
               onChange={e => setFromVal(e.target.value)}
-              className="border border-border rounded-md px-2 py-1.5 text-sm"
+              className="h-11 border border-border rounded-md px-3 text-base"
             />
           </div>
           <div className="flex flex-col gap-1">
@@ -94,13 +98,13 @@ export function DateFilter() {
             <input
               id="date-to" type="date" value={toVal} min={fromVal || undefined}
               onChange={e => setToVal(e.target.value)}
-              className="border border-border rounded-md px-2 py-1.5 text-sm"
+              className="h-11 border border-border rounded-md px-3 text-base"
             />
           </div>
           <button
             onClick={applyCustom}
             disabled={!fromVal && !toVal}
-            className="bg-primary text-primary-foreground text-sm font-medium px-4 py-1.5 rounded-md hover:bg-primary/90 disabled:opacity-40 transition-colors"
+            className="h-11 bg-primary text-primary-foreground text-sm font-medium px-4 rounded-md hover:bg-primary/90 disabled:opacity-40 transition-colors"
           >
             Apply
           </button>

@@ -73,8 +73,8 @@ export default async function EventDetailPage({
     <div className="min-h-screen bg-background">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <header className="border-b bg-card/95 sticky top-0 z-40">
-        <div className="max-w-3xl mx-auto px-4 py-3">
-          <Link href={`/${citySlug}`} className="text-sm text-primary hover:underline">← Back to events</Link>
+        <div className="max-w-3xl mx-auto px-4">
+          <Link href={`/${citySlug}`} className="inline-flex items-center h-11 text-sm text-primary hover:underline">← Back to events</Link>
         </div>
       </header>
 

@@ -25,23 +25,26 @@ export function ViewToggle() {
     router.push(`${pathname}?${params.toString()}`)
   }
 
+  // py-2.5 (vs. the old py-1.5) keeps these near the 44px touch-target floor
+  // on mobile, where the label is hidden and only the icon shows.
   const btn = (active: boolean) =>
-    `flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium transition-colors ${
+    `flex items-center justify-center gap-1.5 px-3.5 py-2.5 sm:py-1.5 text-sm font-medium transition-colors ${
       active ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:text-primary'
     }`
 
   return (
     <div className="inline-flex rounded-lg border border-border overflow-hidden shrink-0">
-      <button onClick={() => setView('grid')} className={btn(view === 'grid')} aria-pressed={view === 'grid'}>
-        <LayoutGrid className="w-4 h-4" />
+      <button onClick={() => setView('grid')} className={btn(view === 'grid')} aria-pressed={view === 'grid'} aria-label="Grid view">
+        <LayoutGrid className="w-5 h-5 sm:w-4 sm:h-4" />
         <span className="hidden sm:inline">Grid</span>
       </button>
       <button
         onClick={() => setView('calendar')}
         className={`${btn(view === 'calendar')} border-l border-border`}
         aria-pressed={view === 'calendar'}
+        aria-label="Calendar view"
       >
-        <CalendarDays className="w-4 h-4" />
+        <CalendarDays className="w-5 h-5 sm:w-4 sm:h-4" />
         <span className="hidden sm:inline">Calendar</span>
       </button>
       {mapsConfigured && (
@@ -49,8 +52,9 @@ export function ViewToggle() {
           onClick={() => setView('map')}
           className={`${btn(view === 'map')} border-l border-border`}
           aria-pressed={view === 'map'}
+          aria-label="Map view"
         >
-          <MapPin className="w-4 h-4" />
+          <MapPin className="w-5 h-5 sm:w-4 sm:h-4" />
           <span className="hidden sm:inline">Map</span>
         </button>
       )}

@@ -162,15 +162,20 @@ export function HeroCarousel({ events, basePath }: Props) {
             <ChevronRight className="w-5 h-5" />
           </button>
 
-          <div className="absolute bottom-3 right-4 sm:right-6 flex items-center gap-1.5">
+          <div className="absolute bottom-1.5 right-2.5 sm:right-4 flex items-center">
             {events.map((event, i) => (
+              // The visible dot stays small (6px) for a tidy indicator row, but
+              // the button itself is a full 32px square so it's still easy to
+              // tap accurately on a phone.
               <button
                 key={event.id}
                 onClick={() => { setActive(i); goTo(i) }}
                 aria-label={`Go to slide ${i + 1}`}
                 aria-current={i === active}
-                className={`h-1.5 rounded-full transition-all ${i === active ? 'w-6 bg-white' : 'w-1.5 bg-white/50 hover:bg-white/75'}`}
-              />
+                className="flex items-center justify-center w-8 h-8"
+              >
+                <span className={`h-1.5 rounded-full transition-all ${i === active ? 'w-6 bg-white' : 'w-1.5 bg-white/50'}`} />
+              </button>
             ))}
           </div>
         </>

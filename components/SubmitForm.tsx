@@ -59,7 +59,7 @@ export function SubmitForm() {
           onChange={e => setText(e.target.value)}
           rows={4}
           placeholder="Sat July 4, 8pm — Indie Night @ Mohawk, $15..."
-          className="w-full border rounded-md px-3 py-2 text-sm"
+          className="w-full border rounded-md px-3.5 py-2.5 text-base"
         />
       </div>
       {status === 'error' && <p className="text-sm text-destructive">{message}</p>}

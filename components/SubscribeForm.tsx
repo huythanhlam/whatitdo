@@ -71,13 +71,13 @@ export function SubscribeForm({ neighborhoods = [] }: { neighborhoods?: string[]
         <p className="text-sm font-medium mb-2">Frequency</p>
         <div className="flex gap-4">
           {(['daily', 'weekly'] as const).map(f => (
-            <label key={f} className="flex items-center gap-2 cursor-pointer text-sm">
+            <label key={f} className="flex items-center gap-2.5 cursor-pointer text-sm py-2">
               <input
                 type="radio"
                 value={f}
                 checked={frequency === f}
                 onChange={() => setFrequency(f)}
-                className="accent-primary"
+                className="accent-primary w-5 h-5"
               />
               <span className="capitalize">{f}</span>
             </label>
@@ -90,9 +90,9 @@ export function SubscribeForm({ neighborhoods = [] }: { neighborhoods?: string[]
           Event types
           <span className="font-normal text-muted-foreground ml-1">(leave all unchecked for everything)</span>
         </p>
-        <div className="grid grid-cols-2 gap-2 mt-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 mt-2">
           {CATEGORIES.map(cat => (
-            <label key={cat.slug} className="flex items-center gap-2 cursor-pointer text-sm">
+            <label key={cat.slug} className="flex items-center gap-2.5 cursor-pointer text-sm py-2">
               <Checkbox
                 checked={selected.includes(cat.slug)}
                 onCheckedChange={() => toggleCat(cat.slug)}
@@ -107,7 +107,7 @@ export function SubscribeForm({ neighborhoods = [] }: { neighborhoods?: string[]
       </div>
 
       <div>
-        <label className="flex items-center gap-2 cursor-pointer text-sm">
+        <label className="flex items-center gap-2.5 cursor-pointer text-sm py-2">
           <Checkbox checked={freeOnly} onCheckedChange={() => setFreeOnly(f => !f)} />
           <span>Only show free events</span>
         </label>
@@ -119,9 +119,9 @@ export function SubscribeForm({ neighborhoods = [] }: { neighborhoods?: string[]
             Neighborhoods
             <span className="font-normal text-muted-foreground ml-1">(leave all unchecked for everywhere)</span>
           </p>
-          <div className="grid grid-cols-2 gap-2 mt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 mt-2">
             {neighborhoods.map(n => (
-              <label key={n} className="flex items-center gap-2 cursor-pointer text-sm">
+              <label key={n} className="flex items-center gap-2.5 cursor-pointer text-sm py-2">
                 <Checkbox
                   checked={selectedNeighborhoods.includes(n)}
                   onCheckedChange={() => toggleNeighborhood(n)}

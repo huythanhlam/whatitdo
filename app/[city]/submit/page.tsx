@@ -9,8 +9,8 @@ export default async function SubmitPage({ params }: { params: Promise<{ city: s
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card/95 sticky top-0 z-40">
-        <div className="max-w-3xl mx-auto px-4 py-3">
-          <Link href={`/${city.slug}`} className="text-sm text-primary hover:underline">← Back to events</Link>
+        <div className="max-w-3xl mx-auto px-4">
+          <Link href={`/${city.slug}`} className="inline-flex items-center h-11 text-sm text-primary hover:underline">← Back to events</Link>
         </div>
       </header>
       <div className="flex items-start justify-center pt-12 pb-20 px-4">

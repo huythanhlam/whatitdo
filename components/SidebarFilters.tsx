@@ -41,7 +41,7 @@ export function SidebarFilters({ compact = false }: { compact?: boolean }) {
             <button
               key={cat.slug}
               onClick={() => toggle(cat.slug)}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap border transition-colors flex items-center gap-1.5 ${
+              className={`px-4 py-2.5 rounded-full text-sm font-medium whitespace-nowrap border transition-colors flex items-center gap-1.5 ${
                 on ? 'border-transparent' : 'bg-background text-muted-foreground border-border'
               }`}
               style={on ? { backgroundColor: cat.color, color: readableTextColor(cat.color) } : undefined}
@@ -60,15 +60,15 @@ export function SidebarFilters({ compact = false }: { compact?: boolean }) {
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-sm">Categories</h2>
         {selected.length > 0 && (
-          <button onClick={clearAll} className="text-xs text-primary hover:underline">
+          <button onClick={clearAll} className="text-sm text-primary hover:underline py-1">
             Clear
           </button>
         )}
       </div>
       <Separator />
-      <div className="space-y-2.5">
+      <div className="space-y-1">
         {CATEGORIES.map(cat => (
-          <div key={cat.slug} className="flex items-center gap-2">
+          <div key={cat.slug} className="flex items-center gap-2.5 py-1.5">
             <Checkbox
               id={cat.slug}
               checked={selected.includes(cat.slug)}

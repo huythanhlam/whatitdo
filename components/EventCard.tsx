@@ -54,22 +54,22 @@ export function EventCard({ event, basePath, featured = false, featuredLabel }: 
         )}
 
         <CardContent className="p-4 space-y-2">
-          <h3 className="font-semibold text-sm leading-tight line-clamp-2 group-hover:text-primary transition-colors">
+          <h3 className="font-semibold text-base leading-snug line-clamp-2 group-hover:text-primary transition-colors">
             {event.title}
           </h3>
 
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             📅 {dateStr} · {timeStr}
           </p>
 
           {event.venue_name && (
-            <p className="text-xs text-muted-foreground truncate">
+            <p className="text-sm text-muted-foreground truncate">
               📍 {event.venue_name}
             </p>
           )}
 
           {priceLabel && (
-            <p className="text-xs font-medium text-success">
+            <p className="text-sm font-medium text-success">
               {event.is_free ? '🆓' : '💰'} {priceLabel}
             </p>
           )}
@@ -79,7 +79,7 @@ export function EventCard({ event, basePath, featured = false, featuredLabel }: 
               <Badge
                 key={cat.slug}
                 variant="secondary"
-                className="text-xs px-1.5 py-0 border"
+                className="text-xs px-2 py-0.5 border"
                 style={{ backgroundColor: cat.color + '18', color: cat.color, borderColor: cat.color + '44' }}
               >
                 {cat.name}
@@ -95,7 +95,7 @@ export function EventCard({ event, basePath, featured = false, featuredLabel }: 
           target="_blank"
           rel="noopener noreferrer"
           title={provider && provider.name !== 'venue site' ? `Opens ${provider.name}` : 'Opens the ticket page'}
-          className="mx-4 mb-4 inline-flex items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+          className="mx-4 mb-4 inline-flex h-11 items-center justify-center gap-1.5 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
         >
           🎟 {ticketCta} →
         </a>

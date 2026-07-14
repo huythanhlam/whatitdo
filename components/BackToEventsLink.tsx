@@ -21,7 +21,7 @@ export function BackToEventsLink({
   return (
     <Link
       href={`/${city}`}
-      className="text-sm bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90 transition-colors font-medium"
+      className="inline-flex items-center h-11 text-sm bg-primary text-primary-foreground px-5 rounded-md hover:bg-primary/90 transition-colors font-medium"
     >
       Back to events
     </Link>

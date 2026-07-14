@@ -42,7 +42,7 @@ export function SourceFilter({ sources, compact = false }: { sources: string[]; 
             <button
               key={src}
               onClick={() => toggle(src)}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap border transition-colors ${
+              className={`px-4 py-2.5 rounded-full text-sm font-medium whitespace-nowrap border transition-colors ${
                 on
                   ? 'bg-primary text-primary-foreground border-transparent'
                   : 'bg-background text-muted-foreground border-border'
@@ -61,15 +61,15 @@ export function SourceFilter({ sources, compact = false }: { sources: string[]; 
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-sm">Source</h2>
         {selected.length > 0 && (
-          <button onClick={clearAll} className="text-xs text-primary hover:underline">
+          <button onClick={clearAll} className="text-sm text-primary hover:underline py-1">
             Clear
           </button>
         )}
       </div>
       <Separator />
-      <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
+      <div className="space-y-1 max-h-64 overflow-y-auto pr-1">
         {sources.map(src => (
-          <div key={src} className="flex items-center gap-2">
+          <div key={src} className="flex items-center gap-2.5 py-1.5">
             <Checkbox
               id={`source-${src}`}
               checked={selected.includes(src)}
