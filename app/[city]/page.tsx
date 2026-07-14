@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
+import { MapPin, ArrowRight } from 'lucide-react'
 import { SearchBar } from '@/components/SearchBar'
 import { SidebarFilters } from '@/components/SidebarFilters'
 import { SourceFilter } from '@/components/SourceFilter'
@@ -7,6 +8,8 @@ import { EventList } from '@/components/EventList'
 import { CalendarView } from '@/components/CalendarView'
 import { MapView } from '@/components/MapView'
 import { ViewToggle } from '@/components/ViewToggle'
+import { HeroCarousel } from '@/components/HeroCarousel'
+import { CategoryCarousel } from '@/components/CategoryCarousel'
 import { listEvents, countEvents, listEventsForMap, getDistinctSources, type City } from '@/lib/db'
 import { requireCity } from '@/lib/cities'
 import { resolveDateRange } from '@/lib/dateRanges'
@@ -97,6 +100,17 @@ async function MapLoader({ city, searchParams }: { city: City; searchParams: Rec
   return <MapView events={events as unknown as EnrichedEvent[]} center={center} basePath={`/${city.slug}`} />
 }
 
+// Pulls a small window of the soonest upcoming events for the hero showcase,
+// preferring ones with an image (the carousel still renders a gradient card
+// for the rest, but a batch of all-text slides looks broken). Falls back to
+// the plain chronological batch if none of the nearest events have art.
+async function HeroLoader({ city, basePath }: { city: City; basePath: string }) {
+  const events = await listEvents({ cityId: city.id, limit: 12, offset: 0 })
+  const withImages = events.filter(e => e.image_url)
+  const slides = (withImages.length > 0 ? withImages : events).slice(0, 6) as unknown as EnrichedEvent[]
+  return <HeroCarousel events={slides} basePath={basePath} />
+}
+
 async function EventsLoader({ city, searchParams }: { city: City; searchParams: Record<string, string | string[]> }) {
   const q = first(searchParams.q) ?? ''
   const categories = toCategories(searchParams.category)
@@ -166,30 +180,100 @@ export default async function CityHomePage({
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b sticky top-0 z-40 bg-card/95 backdrop-blur-sm shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-4">
-          <Link href={base} className="font-bold text-lg text-primary shrink-0 whitespace-nowrap">
-            🎉 Whats Happenin {city.name}
+      <header className="border-b border-border sticky top-0 z-40 bg-card/95 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3">
+          <Link href={base} className="flex items-center gap-2 shrink-0">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-lg">🎉</span>
+            <span className="font-display text-lg sm:text-xl font-semibold tracking-tight text-foreground whitespace-nowrap">
+              Whats Happenin
+            </span>
           </Link>
-          <div className="flex-1 max-w-xl">
-            <Suspense fallback={<div className="h-9 bg-muted rounded-md animate-pulse" />}>
-              <SearchBar />
-            </Suspense>
-          </div>
+          <span className="hidden lg:inline-flex items-center gap-1 text-sm font-medium text-muted-foreground border-l border-border pl-4">
+            <MapPin className="w-3.5 h-3.5" /> {city.name}, {city.state}
+          </span>
           <Link
             href={`${base}/submit`}
-            className="shrink-0 text-sm text-muted-foreground hover:text-primary font-medium hidden sm:inline"
+            className="hidden sm:inline order-4 shrink-0 text-sm text-muted-foreground hover:text-primary font-medium"
           >
             Submit an event
           </Link>
           <Link
             href={`${base}/subscribe`}
-            className="shrink-0 text-sm bg-primary text-primary-foreground px-3 py-1.5 rounded-md hover:bg-primary/90 transition-colors font-medium"
+            className="order-2 sm:order-5 ml-auto sm:ml-0 shrink-0 text-sm bg-primary text-primary-foreground px-3.5 py-2 sm:px-4 rounded-full hover:bg-primary/90 transition-colors font-semibold"
           >
             Get Updates
           </Link>
+          {/* Full-width on mobile so it wraps to its own row instead of
+              squeezing down to an unusable sliver next to the logo/CTA. */}
+          <div className="order-5 sm:order-3 w-full sm:w-auto sm:flex-1 sm:max-w-xl">
+            <Suspense fallback={<div className="h-9 bg-muted rounded-md animate-pulse" />}>
+              <SearchBar />
+            </Suspense>
+          </div>
         </div>
       </header>
+
+      {/* Hero — headline, search CTAs, and a rotating showcase of what's coming
+          up, in the spirit of Meetup/Eventbrite's home hero. */}
+      <section className="relative overflow-hidden border-b border-border">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -top-32 -left-24 h-96 w-96 rounded-full opacity-40 blur-3xl"
+          style={{ background: 'radial-gradient(circle, var(--color-coral-500), transparent 70%)' }}
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -bottom-40 -right-16 h-96 w-96 rounded-full opacity-30 blur-3xl"
+          style={{ background: 'radial-gradient(circle, var(--color-slate-500), transparent 70%)' }}
+        />
+
+        <div className="relative max-w-7xl mx-auto px-4 py-10 sm:py-16 grid gap-10 lg:grid-cols-[1.05fr_1fr] lg:items-center">
+          <div style={{ animation: 'fade-up 0.5s ease-out both' }}>
+            <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-primary mb-4">
+              <MapPin className="w-3.5 h-3.5" /> {city.name}, {city.state}
+            </p>
+            <h1 className="font-display text-4xl sm:text-5xl lg:text-[3.4rem] font-semibold leading-[1.05] text-foreground text-balance">
+              Find your next favorite thing to do
+            </h1>
+            <p className="mt-4 text-base sm:text-lg text-muted-foreground max-w-md text-balance">
+              Concerts, festivals, comedy, food &amp; drink, arts, and more — aggregated daily across {city.name}.
+            </p>
+            <div className="mt-7 flex flex-wrap items-center gap-3">
+              <Link
+                href={`${base}#events`}
+                className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
+              >
+                Browse Events <ArrowRight className="w-4 h-4" />
+              </Link>
+              <Link
+                href={`${base}?when=weekend#events`}
+                className="inline-flex items-center rounded-full border border-border bg-card px-6 py-3 text-sm font-semibold text-foreground hover:border-primary hover:text-primary transition-colors"
+              >
+                This Weekend
+              </Link>
+              <Link
+                href={`${base}/submit`}
+                className="inline-flex items-center gap-1 px-2 py-3 text-sm font-semibold text-muted-foreground hover:text-primary transition-colors"
+              >
+                Submit an event <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+          </div>
+
+          <Suspense fallback={<div className="aspect-[16/9] sm:aspect-[21/9] w-full rounded-2xl bg-muted animate-pulse" />}>
+            <HeroLoader city={city} basePath={base} />
+          </Suspense>
+        </div>
+      </section>
+
+      {/* Category carousel — a bold, single-click way into a filtered result
+          set; SidebarFilters below still handles multi-select refinement. */}
+      <section className="border-b border-border bg-card/50">
+        <div className="max-w-7xl mx-auto px-4 py-6">
+          <h2 className="font-display text-lg font-semibold text-foreground mb-3">Browse by category</h2>
+          <CategoryCarousel basePath={base} />
+        </div>
+      </section>
 
       <div className="max-w-7xl mx-auto px-4 py-6 flex gap-8">
         <div className="hidden md:block w-52 shrink-0 pt-1 space-y-6">
@@ -201,9 +285,9 @@ export default async function CityHomePage({
           </Suspense>
         </div>
 
-        <main className="flex-1 min-w-0">
+        <main id="events" className="flex-1 min-w-0 scroll-mt-20">
           <div className="flex items-center justify-between gap-3 mb-4">
-            <h1 className="text-lg font-semibold text-foreground">{city.name} Events</h1>
+            <h2 className="text-lg font-semibold text-foreground">{city.name} Events</h2>
             <Suspense fallback={<div className="h-9 w-32 bg-muted rounded-lg animate-pulse" />}>
               <ViewToggle />
             </Suspense>

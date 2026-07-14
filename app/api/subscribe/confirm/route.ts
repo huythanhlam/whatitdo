@@ -3,7 +3,7 @@ import { confirmSubscription } from '@/lib/db'
 
 function htmlPage(body: string): NextResponse {
   return new NextResponse(
-    `<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:420px;margin:80px auto;text-align:center;color:#333">${body}</body></html>`,
+    `<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:420px;margin:80px auto;text-align:center;color:#4A6163">${body}</body></html>`,
     { headers: { 'Content-Type': 'text/html' } }
   )
 }
@@ -21,6 +21,6 @@ export async function GET(req: NextRequest) {
   return htmlPage(
     `<h2>You're confirmed! ✓</h2>
      <p>Your subscription is active — your first digest will arrive on schedule.</p>
-     <a href="/" style="color:#7c3aed">Back to events</a>`
+     <a href="/" style="color:#F17A7E">Back to events</a>`
   )
 }
