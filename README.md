@@ -2,11 +2,14 @@
 
 A multi-city events aggregator built on Next.js 16 (App Router, React 19),
 currently live for **Austin** and **Houston** under `/[city]/` routing (`/`
-redirects to the first enabled city). It ingests events daily from many
-sources (Eventbrite, City iCal, Ticketmaster/SeatGeek, local newspaper RSS,
-social, YouTube, and a Gemini-powered page crawler), tags and de-dupes them,
-and serves a filterable/searchable grid + calendar with personalized email
-digests and paid featured listings.
+redirects to the first enabled city). It ingests events daily from a wide mix
+of sources — Eventbrite, city iCal feeds, Ticketmaster, SeatGeek, Meetup,
+Luma, Partiful, Meanwhile Brewing, DMO/CVB event calendars (Simpleview),
+CultureMap, generic schema.org JSON-LD event pages, local newspaper RSS,
+Bluesky, YouTube, and a Gemini-powered page crawler (single-page and
+paginated) — de-dupes and tags them, and serves a filterable/searchable
+grid, calendar, and map view with personalized email digests and
+time-bounded featured listings.
 
 **It runs with zero credentials** — no accounts, no keys — thanks to an embedded
 in-memory Postgres (PGlite) seeded with real Austin events.
@@ -98,6 +101,7 @@ curl -X POST http://localhost:3000/api/subscribe \
 | `npm test` | Run the Vitest suite (pure fns, fixture parsers, PGlite integration) |
 | `npm run lint` | ESLint |
 | `npm run migrate` | Apply `supabase/migrations/*` to `DATABASE_URL` (prod DB) |
+| `npm run backfill-geocode` | One-off: geocode any existing venues that predate `GOOGLE_GEOCODING_API_KEY` being set |
 
 ## Going to production
 
@@ -135,6 +139,10 @@ Everything above works without these; add them to unlock more:
   changes.
 - `BROWSER_FETCH_URL` / `BROWSER_FETCH_TOKEN` — headless-render fallback for
   JS-heavy/blocked pages.
+- `GOOGLE_GEOCODING_API_KEY` — geocodes each unique venue once at ingest time
+  (cached in the `venues` table), which powers neighborhood-filtered digests.
+  `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` (a separate, HTTP-referrer-restricted key)
+  renders the map view in the browser; without it the map toggle is hidden.
 - `RESEND_API_KEY` + `EMAIL_FROM` — actually send the email digests.
 - `CRON_SECRET` — **required in production**; guards the ingest/import/featured/
   digest/health routes (they refuse to run without it). Generate:
