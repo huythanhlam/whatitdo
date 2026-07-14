@@ -26,7 +26,11 @@ export function HeroCarousel({ events, basePath }: Props) {
     const track = trackRef.current
     if (!track) return
     const slide = track.children[index] as HTMLElement | undefined
-    slide?.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' })
+    if (!slide) return
+    // Scroll only the track itself — `slide.scrollIntoView` would walk up
+    // every scrollable ancestor including the page, yanking the whole
+    // window back to the top whenever the active slide changes.
+    track.scrollTo({ left: slide.offsetLeft, behavior: 'smooth' })
   }, [])
 
   useEffect(() => {
