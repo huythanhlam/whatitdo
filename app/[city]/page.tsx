@@ -218,21 +218,27 @@ export default async function CityHomePage({
 
       {/* Hero — headline, search CTAs, and a rotating showcase of what's coming
           up, in the spirit of Meetup/Eventbrite's home hero. */}
-      {/* overflow-clip, not overflow-hidden: the -right-16 blob below genuinely
-          extends past this box, and overflow-hidden (unlike clip) makes an
-          element scrollable — HeroCarousel's scrollIntoView() calls were then
-          free to scroll *this* section a few px sideways, eating the left
-          padding on mobile. clip still hides the bleed without the scroll
-          container side effect. */}
+      {/* overflow-clip (not overflow-hidden, which makes an element scrollable)
+          plus keeping the blobs below within the box on the x-axis — a
+          scrollIntoView() call from HeroCarousel's autoplay was able to
+          scroll this section a few px sideways whenever a blob's real
+          horizontal overflow made it a scroll container, silently eating the
+          left padding on mobile. Belt-and-suspenders: no real x-overflow, and
+          overflow-clip as a backstop in case another descendant ever adds one. */}
       <section className="relative overflow-clip border-b border-border">
         <div
           aria-hidden
-          className="pointer-events-none absolute -top-32 -left-24 h-96 w-96 rounded-full opacity-40 blur-3xl"
+          // w-72 (288px) stays under even a 320px viewport; w-96 only once sm:
+          // gives it room. Smaller than that and this contributes real
+          // scrollWidth overflow — harmless with overflow-clip (verified it
+          // can't actually be scrolled), but zero overflow is one less thing
+          // to rely on browser-specific overflow-clip semantics for.
+          className="pointer-events-none absolute -top-32 left-0 h-72 w-72 sm:h-96 sm:w-96 rounded-full opacity-40 blur-3xl"
           style={{ background: 'radial-gradient(circle, var(--color-coral-500), transparent 70%)' }}
         />
         <div
           aria-hidden
-          className="pointer-events-none absolute -bottom-40 -right-16 h-96 w-96 rounded-full opacity-30 blur-3xl"
+          className="pointer-events-none absolute -bottom-40 right-0 h-72 w-72 sm:h-96 sm:w-96 rounded-full opacity-30 blur-3xl"
           style={{ background: 'radial-gradient(circle, var(--color-slate-500), transparent 70%)' }}
         />
 
