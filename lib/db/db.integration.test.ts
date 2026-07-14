@@ -456,7 +456,11 @@ describe('event_sources.source_id backfill + stamping (migration 009)', () => {
 describe('source queries (Phase 2B)', () => {
   it('getEnabledSources returns Austin enabled rows only', async () => {
     const rows = await getEnabledSources(1)
-    expect(rows.length).toBeGreaterThanOrEqual(15)
+    // Lowered from 15 after migration 025 disabled 13 low-yield free-text
+    // sources (newspapers/social/YouTube) — 11 is the current enabled count;
+    // floor is a sanity check, not an exact assertion, so it doesn't need to
+    // move every time a source is added or disabled.
+    expect(rows.length).toBeGreaterThanOrEqual(10)
     expect(rows.every(r => r.enabled && r.city_id === 1)).toBe(true)
     const eb = rows.find(r => r.name === 'eventbrite')
     expect(eb?.parser).toBe('eventbrite')
