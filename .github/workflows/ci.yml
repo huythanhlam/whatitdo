@@ -41,6 +41,8 @@ jobs:
   # init; Postgres does not). Runs only on main — never on PRs — and only after
   # the build passes. Requires a DATABASE_URL repo secret (the Supabase pooler
   # connection); until it's set, the step no-ops instead of failing the run.
+  # If the pooler's cert chain trips SELF_SIGNED_CERT_IN_CHAIN, also add a
+  # DATABASE_CA_CERT repo secret (see .env.example for how to obtain it).
   migrate:
     needs: build
     if: github.ref == 'refs/heads/main'
@@ -59,6 +61,7 @@ jobs:
       - name: Apply migrations to Supabase
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_CA_CERT: ${{ secrets.DATABASE_CA_CERT }}
         run: |
           if [ -n "$DATABASE_URL" ]; then
             npm run migrate
