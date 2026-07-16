@@ -127,16 +127,38 @@ function toRawEvent(entry: LumaEntry, source: string): RawEvent | null {
   }
 }
 
+// The place_api_id geo search (see module comment) is a fuzzy radius search,
+// not a hard city boundary — it has been observed to surface events whose
+// geo_address_info is a genuinely different city/state (e.g. DC events
+// leaking into the Austin feed). venue_address always ends in a "City, ST
+// [zip,] USA"-shaped tail when Luma has a real postal address, so a mismatch
+// there is a reliable signal; an address that doesn't parse (or is absent,
+// e.g. online events) is left alone rather than guessed at, since a false
+// reject (hiding a real local event) is a worse failure than a rare
+// unfiltered false positive.
+function stateFromAddress(address: string | null): string | null {
+  if (!address) return null
+  const m = address.match(/,\s*([A-Za-z]{2})\b/)
+  return m ? m[1].toUpperCase() : null
+}
+
 // Pure entries[] -> events reduction (no network), so it's unit-testable
 // without mocking fetch. Dedupes by id since cursor pages aren't guaranteed
-// disjoint (mirrors meetup.ts's merged-map dedup).
-export function eventsFromEntries(entries: unknown, source: string): RawEvent[] {
+// disjoint (mirrors meetup.ts's merged-map dedup). `targetState` (the
+// configured city's two-letter state code) drops any entry whose address
+// resolves to a different state; omit it to skip this check entirely.
+export function eventsFromEntries(entries: unknown, source: string, targetState?: string): RawEvent[] {
   if (!Array.isArray(entries)) return []
   const seen = new Map<string, RawEvent>()
   for (const e of entries) {
     if (!isLumaEntry(e) || seen.has(e.event!.api_id as string)) continue
     const raw = toRawEvent(e, source)
-    if (raw) seen.set(e.event!.api_id as string, raw)
+    if (!raw) continue
+    if (targetState) {
+      const state = stateFromAddress(raw.venue_address)
+      if (state && state !== targetState.toUpperCase()) continue
+    }
+    seen.set(e.event!.api_id as string, raw)
   }
   return [...seen.values()]
 }
@@ -211,7 +233,7 @@ async function fetchPage(geoParam: [string, string], cursor: string | null): Pro
   }
 }
 
-export async function fetchLumaEvents(url: string, source: string): Promise<RawEvent[]> {
+export async function fetchLumaEvents(url: string, source: string, targetState?: string): Promise<RawEvent[]> {
   const placeApiId = await resolvePlaceApiId(url)
   const slug = slugFromUrl(url)
   const geoParam: [string, string] | null = placeApiId ? ['place_api_id', placeApiId] : slug ? ['slug', slug] : null
@@ -227,5 +249,5 @@ export async function fetchLumaEvents(url: string, source: string): Promise<RawE
     cursor = data.next_cursor
   }
 
-  return eventsFromEntries(merged, source)
+  return eventsFromEntries(merged, source, targetState)
 }

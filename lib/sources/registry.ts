@@ -81,8 +81,11 @@ export const PARSERS: Record<string, SourceParser> = {
   // discover page. `url` is the human discover page (e.g.
   // https://luma.com/austin); the parser resolves its place_api_id and
   // paginates the full geo-search on it (much bigger than the page's own
-  // capped "Popular events" feed), no Gemini.
-  luma: simple(() => true, (url, name) => fetchLumaEvents(url!, name)),
+  // capped "Popular events" feed), no Gemini. That geo search is a fuzzy
+  // radius, not a hard city boundary, so `ctx.city.state` is passed through
+  // to drop any entry whose address resolves to a different state (e.g. a DC
+  // event leaking into the Austin feed).
+  luma: simple(() => true, (url, name, ctx) => fetchLumaEvents(url!, name, ctx.city.state)),
 
   // meanwhilebeer.com/events: static server-rendered Webflow CMS collection
   // list, no Gemini. `url` is the events index page; the parser follows the
