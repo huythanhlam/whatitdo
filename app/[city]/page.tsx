@@ -11,6 +11,7 @@ import { ViewToggle } from '@/components/ViewToggle'
 import { HeroCarousel } from '@/components/HeroCarousel'
 import { CategoryCarousel } from '@/components/CategoryCarousel'
 import { BackToTopButton } from '@/components/BackToTopButton'
+import { HeaderHeightSync } from '@/components/HeaderHeightSync'
 import { listEvents, countEvents, listEventsForMap, getDistinctSources, type City } from '@/lib/db'
 import { requireCity } from '@/lib/cities'
 import { resolveDateRange } from '@/lib/dateRanges'
@@ -181,6 +182,7 @@ export default async function CityHomePage({
 
   return (
     <div className="min-h-screen bg-background">
+      <HeaderHeightSync />
       <header className="border-b border-border sticky top-0 z-40 bg-card/95 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3">
           <Link href={base} className="flex items-center gap-2 shrink-0">
@@ -277,7 +279,10 @@ export default async function CityHomePage({
       </section>
 
       <div className="max-w-7xl mx-auto px-4 py-6 flex gap-8">
-        <div className="hidden md:block w-52 shrink-0 self-start sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto pt-1 space-y-6">
+        <div
+          className="hidden md:block w-52 shrink-0 self-start sticky max-h-[calc(100vh-6rem)] overflow-y-auto pt-1 space-y-6"
+          style={{ top: 'var(--header-h, 5rem)' }}
+        >
           <Suspense>
             <SidebarFilters />
           </Suspense>
@@ -303,10 +308,14 @@ export default async function CityHomePage({
           </div>
 
           {/* Category + source filters on mobile (sidebar is hidden < md).
-              Sticky below the header (which wraps to a taller 3-row layout
-              on mobile, hence the larger top offset than the desktop sidebar's
-              top-20) so filters stay reachable while scrolling the grid. */}
-          <div className="md:hidden sticky top-40 z-30 -mx-4 px-4 py-3 mb-5 space-y-2 bg-background/95 backdrop-blur-sm border-b border-border">
+              Sticky right below the header — offset via --header-h (set by
+              HeaderHeightSync) rather than a hardcoded pixel value, since the
+              header wraps to a taller layout on mobile and its exact height
+              varies with content/font metrics. */}
+          <div
+            className="md:hidden sticky z-30 -mx-4 px-4 py-3 mb-5 space-y-2 bg-background/95 backdrop-blur-sm border-b border-border"
+            style={{ top: 'var(--header-h, 10rem)' }}
+          >
             <Suspense>
               <SidebarFilters compact />
             </Suspense>
