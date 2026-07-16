@@ -136,4 +136,55 @@ describe('eventsFromEntries', () => {
     expect(eventsFromEntries(undefined, 'luma')).toEqual([])
     expect(eventsFromEntries('not an array', 'luma')).toEqual([])
   })
+
+  describe('targetState filtering', () => {
+    it('keeps an event whose address state matches targetState', () => {
+      const events = eventsFromEntries([entry()], 'luma', 'TX')
+      expect(events).toHaveLength(1)
+    })
+
+    it('drops an event whose address resolves to a different state (e.g. a DC event leaking into an Austin feed)', () => {
+      const events = eventsFromEntries(
+        [entry({ api_id: 'evt-dc', geo_address_info: { full_address: '1600 Pennsylvania Ave NW, Washington, DC 20500, USA' } })],
+        'luma',
+        'TX'
+      )
+      expect(events).toEqual([])
+    })
+
+    it('keeps an event whose city_state matches targetState', () => {
+      const events = eventsFromEntries(
+        [entry({ api_id: 'evt-cs', geo_address_info: { city_state: 'Round Rock, TX' } })],
+        'luma',
+        'TX'
+      )
+      expect(events).toHaveLength(1)
+    })
+
+    it('keeps an online event with no address regardless of targetState', () => {
+      const events = eventsFromEntries(
+        [entry({ api_id: 'evt-online', location_type: 'online', geo_address_info: undefined })],
+        'luma',
+        'TX'
+      )
+      expect(events).toHaveLength(1)
+    })
+
+    it('keeps an event whose address has no parseable state (ambiguous, not a confirmed mismatch)', () => {
+      const events = eventsFromEntries(
+        [entry({ api_id: 'evt-ambiguous', geo_address_info: { address: 'Some Venue', full_address: 'Somewhere Unparseable' } })],
+        'luma',
+        'TX'
+      )
+      expect(events).toHaveLength(1)
+    })
+
+    it('applies no filtering when targetState is omitted (existing behavior)', () => {
+      const events = eventsFromEntries(
+        [entry({ api_id: 'evt-dc', geo_address_info: { full_address: '1600 Pennsylvania Ave NW, Washington, DC 20500, USA' } })],
+        'luma'
+      )
+      expect(events).toHaveLength(1)
+    })
+  })
 })
