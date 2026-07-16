@@ -302,8 +302,11 @@ export default async function CityHomePage({
             ))}
           </div>
 
-          {/* Category + source filters on mobile (sidebar is hidden < md) */}
-          <div className="md:hidden mb-5 space-y-2">
+          {/* Category + source filters on mobile (sidebar is hidden < md).
+              Sticky below the header (which wraps to a taller 3-row layout
+              on mobile, hence the larger top offset than the desktop sidebar's
+              top-20) so filters stay reachable while scrolling the grid. */}
+          <div className="md:hidden sticky top-40 z-30 -mx-4 px-4 py-3 mb-5 space-y-2 bg-background/95 backdrop-blur-sm border-b border-border">
             <Suspense>
               <SidebarFilters compact />
             </Suspense>
