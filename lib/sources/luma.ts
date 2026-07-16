@@ -136,7 +136,7 @@ function toRawEvent(entry: LumaEntry, source: string): RawEvent | null {
 // e.g. online events) is left alone rather than guessed at, since a false
 // reject (hiding a real local event) is a worse failure than a rare
 // unfiltered false positive.
-function stateFromAddress(address: string | null): string | null {
+export function stateFromAddress(address: string | null): string | null {
   if (!address) return null
   const m = address.match(/,\s*([A-Za-z]{2})\b/)
   return m ? m[1].toUpperCase() : null
