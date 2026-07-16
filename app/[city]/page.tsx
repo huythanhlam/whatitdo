@@ -10,6 +10,7 @@ import { MapView } from '@/components/MapView'
 import { ViewToggle } from '@/components/ViewToggle'
 import { HeroCarousel } from '@/components/HeroCarousel'
 import { CategoryCarousel } from '@/components/CategoryCarousel'
+import { BackToTopButton } from '@/components/BackToTopButton'
 import { listEvents, countEvents, listEventsForMap, getDistinctSources, type City } from '@/lib/db'
 import { requireCity } from '@/lib/cities'
 import { resolveDateRange } from '@/lib/dateRanges'
@@ -276,7 +277,7 @@ export default async function CityHomePage({
       </section>
 
       <div className="max-w-7xl mx-auto px-4 py-6 flex gap-8">
-        <div className="hidden md:block w-52 shrink-0 pt-1 space-y-6">
+        <div className="hidden md:block w-52 shrink-0 self-start sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto pt-1 space-y-6">
           <Suspense>
             <SidebarFilters />
           </Suspense>
@@ -342,6 +343,8 @@ export default async function CityHomePage({
           )}
         </main>
       </div>
+
+      <BackToTopButton />
     </div>
   )
 }
