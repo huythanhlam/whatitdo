@@ -13,6 +13,8 @@ const ai = apiKey ? new GoogleGenAI({ apiKey }) : null
 
 export const DEFAULT_MODEL = 'gemini-2.5-flash'
 export const TAGGING_MODEL = 'gemini-2.5-flash-lite'
+export const EMBEDDING_MODEL = 'text-embedding-004'
+export const EMBEDDING_DIM = 768
 
 // True when a key is configured. Callers use it to skip work entirely (e.g. the
 // keyword-tagger fallback) rather than issuing calls that would return null.
@@ -151,6 +153,28 @@ export async function geminiJson<T>(opts: {
     return JSON.parse(stripFences(response.text ?? '')) as T
   } catch {
     console.error('Gemini returned unparseable JSON')
+    return null
+  }
+}
+
+// Embed a batch of texts to fixed-dimension vectors for the recommender's
+// semantic feature. Returns one vector per input (order preserved), or null when
+// no key is configured / the call fails — callers then leave the embedding unset
+// and the scorer treats it as no signal, exactly like the tagger's keyword
+// fallback. Kept separate from the geminiJson budget: embeddings are a different,
+// cheaper quota and run in a backfill, not the per-run ingest meter.
+export async function embedTexts(texts: string[]): Promise<number[][] | null> {
+  if (!ai || texts.length === 0) return null
+  try {
+    const res = await ai.models.embedContent({
+      model: EMBEDDING_MODEL,
+      contents: texts,
+    })
+    const vectors = res.embeddings?.map(e => e.values ?? []) ?? []
+    if (vectors.length !== texts.length || vectors.some(v => v.length === 0)) return null
+    return vectors
+  } catch (e) {
+    console.error('Gemini embedding failed:', (e as Error).message)
     return null
   }
 }
