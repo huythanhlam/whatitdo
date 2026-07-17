@@ -194,9 +194,15 @@ PR and on `main` (`.github/workflows/ci.yml`).
   Components (`app/[city]/page.tsx`); no client fetch waterfall.
 - **URL-as-state filters** — search, categories, date range, view, and calendar
   month all live in query params, so every view is shareable and server-rendered.
-- **One query layer** — `lib/db` runs raw SQL over a `Db` driver seam: a `pg`
-  Pool (Supabase pooler) in prod, embedded PGlite locally. The same
-  `supabase/migrations/*` are the single schema truth for both.
+- **Catalog query layer** — `lib/db` runs raw SQL over a `Db` driver seam: a `pg`
+  Pool (Supabase Postgres) in prod, embedded PGlite for zero-config local catalog
+  dev/tests. The same `supabase/migrations/*` are the single schema truth.
+- **Auth + user-private data** — Supabase Auth (passwordless OTP) with per-user
+  Row Level Security. User-private reads/writes (favorites, interactions,
+  interests, profile) go through the RLS-scoped Supabase client
+  (`lib/user/data.ts`, `@supabase/ssr` → PostgREST), so the database enforces
+  `auth.uid() = user_id`. Event metadata stays public. Local dev uses the Supabase
+  CLI stack (`supabase start`); see `docs/RECOMMENDATIONS-SPEC.md`.
 - This is a modified Next.js 16 build; breaking-change guides ship in
   `node_modules/next/dist/docs/` — read them before changing framework code (see
   [`AGENTS.md`](AGENTS.md)).
