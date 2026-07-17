@@ -228,7 +228,7 @@ export async function listUserInterests(sb: SB): Promise<{ kind: string; value: 
 
 export async function updateProfile(
   sb: SB,
-  patch: { display_name?: string | null; home_city_id?: number | null; personalization_opt_out?: boolean }
+  patch: { display_name?: string | null; home_city_id?: number | null; personalization_opt_out?: boolean; magic_link_enabled?: boolean }
 ): Promise<void> {
   const { data: { user } } = await sb.auth.getUser()
   if (!user) return

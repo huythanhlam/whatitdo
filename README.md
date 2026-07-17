@@ -197,9 +197,13 @@ PR and on `main` (`.github/workflows/ci.yml`).
 - **Catalog query layer** — `lib/db` runs raw SQL over a `Db` driver seam: a `pg`
   Pool (Supabase Postgres) in prod, embedded PGlite for zero-config local catalog
   dev/tests. The same `supabase/migrations/*` are the single schema truth.
-- **Auth + user-private data** — Supabase Auth (passwordless OTP) with per-user
-  Row Level Security. User-private reads/writes (favorites, interactions,
-  interests, profile) go through the RLS-scoped Supabase client
+- **Auth + user-private data** — Supabase Auth with per-user Row Level Security.
+  Email + password is the default sign-in/sign-up (no email sent); passwordless
+  magic-link login is a per-account opt-in (`profiles.magic_link_enabled`),
+  gated server-side by `/api/auth/magic-link` so OTP emails go only to accounts
+  that turned it on. Password reset is on-demand email. User-private reads/writes
+  (favorites, interactions, interests, profile) go through the RLS-scoped
+  Supabase client
   (`lib/user/data.ts`, `@supabase/ssr` → PostgREST), so the database enforces
   `auth.uid() = user_id`. Event metadata stays public. Local dev uses the Supabase
   CLI stack (`supabase start`); see `docs/RECOMMENDATIONS-SPEC.md`.
