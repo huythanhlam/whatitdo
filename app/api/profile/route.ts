@@ -47,7 +47,7 @@ async function cleanPrefs(p: { categories?: unknown; neighborhoods?: unknown; fr
 export async function GET() {
   const { supabase, user } = await getUser()
   if (!user) return NextResponse.json({ error: 'Not signed in' }, { status: 401, headers: NO_STORE })
-  const { data: prof } = await supabase.from('profiles').select('display_name, home_city_id, personalization_opt_out, onboarded_at').eq('id', user.id).maybeSingle()
+  const { data: prof } = await supabase.from('profiles').select('display_name, home_city_id, personalization_opt_out, magic_link_enabled, onboarded_at').eq('id', user.id).maybeSingle()
   const interests = await listUserInterests(supabase)
   return NextResponse.json(
     {
@@ -56,6 +56,7 @@ export async function GET() {
         displayName: prof?.display_name ?? null,
         homeCityId: prof?.home_city_id ?? null,
         personalizationOptOut: prof?.personalization_opt_out ?? false,
+        magicLinkEnabled: prof?.magic_link_enabled ?? false,
         onboardedAt: prof?.onboarded_at ?? null,
       },
       prefs: groupInterests(interests),
@@ -68,17 +69,18 @@ export async function PATCH(req: NextRequest) {
   const { supabase, user } = await getUser()
   if (!user) return NextResponse.json({ error: 'Not signed in' }, { status: 401, headers: NO_STORE })
 
-  let body: { displayName?: unknown; personalizationOptOut?: unknown; prefs?: SurveyPrefs }
+  let body: { displayName?: unknown; personalizationOptOut?: unknown; magicLinkEnabled?: unknown; prefs?: SurveyPrefs }
   try {
     body = await req.json()
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400, headers: NO_STORE })
   }
 
-  const patch: { display_name?: string | null; personalization_opt_out?: boolean } = {}
+  const patch: { display_name?: string | null; personalization_opt_out?: boolean; magic_link_enabled?: boolean } = {}
   if (typeof body.displayName === 'string') patch.display_name = body.displayName.trim().slice(0, 80) || null
   else if (body.displayName === null) patch.display_name = null
   if (typeof body.personalizationOptOut === 'boolean') patch.personalization_opt_out = body.personalizationOptOut
+  if (typeof body.magicLinkEnabled === 'boolean') patch.magic_link_enabled = body.magicLinkEnabled
   if (Object.keys(patch).length > 0) await updateProfile(supabase, patch)
 
   if (body.prefs) {

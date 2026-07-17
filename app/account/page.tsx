@@ -45,7 +45,7 @@ export default async function AccountPage() {
 
   const city = await getCityBySlug(RECS_CITY)
   const [prof, interests, favIds, intIds, hidIds, neighborhoods, digestRes] = await Promise.all([
-    supabase.from('profiles').select('display_name, personalization_opt_out').eq('id', user.id).maybeSingle(),
+    supabase.from('profiles').select('display_name, personalization_opt_out, magic_link_enabled').eq('id', user.id).maybeSingle(),
     listUserInterests(supabase),
     listFavoriteIds(supabase),
     listInterestedEventIds(supabase),
@@ -78,6 +78,7 @@ export default async function AccountPage() {
           email={user.email ?? ''}
           displayName={(prof.data?.display_name as string | null) ?? null}
           personalizationOptOut={!!prof.data?.personalization_opt_out}
+          magicLinkEnabled={!!prof.data?.magic_link_enabled}
           prefs={groupInterests(interests)}
           categories={CATEGORIES.map(c => ({ slug: c.slug, name: c.name, color: c.color }))}
           neighborhoods={neighborhoods}

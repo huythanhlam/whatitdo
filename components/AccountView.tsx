@@ -34,6 +34,7 @@ export function AccountView({
   email,
   displayName: initialName,
   personalizationOptOut: initialOptOut,
+  magicLinkEnabled: initialMagicLink,
   prefs: initialPrefs,
   categories,
   neighborhoods,
@@ -45,6 +46,7 @@ export function AccountView({
   email: string
   displayName: string | null
   personalizationOptOut: boolean
+  magicLinkEnabled: boolean
   prefs: SurveyPrefs
   categories: Cat[]
   neighborhoods: string[]
@@ -56,6 +58,7 @@ export function AccountView({
   const router = useRouter()
   const [name, setName] = useState(initialName ?? '')
   const [optOut, setOptOut] = useState(initialOptOut)
+  const [magicLink, setMagicLink] = useState(initialMagicLink)
   const [cats, setCats] = useState<Set<string>>(new Set(initialPrefs.categories))
   const [hoods, setHoods] = useState<Set<string>>(new Set(initialPrefs.neighborhoods))
   const [freeOnly, setFreeOnly] = useState(initialPrefs.freeOnly)
@@ -81,6 +84,7 @@ export function AccountView({
       body: JSON.stringify({
         displayName: name.trim() || null,
         personalizationOptOut: optOut,
+        magicLinkEnabled: magicLink,
         prefs: { categories: [...cats], neighborhoods: [...hoods], freeOnly, days: [...days] },
       }),
     })
@@ -196,6 +200,20 @@ export function AccountView({
             You’re not subscribed. <Link href={`${BASE}/subscribe`} className="text-primary hover:underline">Get the weekly digest</Link>
           </p>
         )}
+      </section>
+
+      {/* Sign-in */}
+      <section>
+        <h2 className="font-display text-lg font-semibold mb-1">Sign-in</h2>
+        <label className="flex items-start gap-2 cursor-pointer text-sm">
+          <input type="checkbox" checked={magicLink} onChange={e => setMagicLink(e.target.checked)} className="h-4 w-4 mt-0.5" />
+          <span>
+            Allow signing in with a magic link
+            <span className="block text-muted-foreground">
+              Adds a passwordless email link as a sign-in option for this account. Off by default; you always keep your password. Save changes to apply.
+            </span>
+          </span>
+        </label>
       </section>
 
       {/* Save bar */}
