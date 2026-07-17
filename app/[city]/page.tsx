@@ -10,10 +10,8 @@ import { MapView } from '@/components/MapView'
 import { ViewToggle } from '@/components/ViewToggle'
 import { HeroCarousel } from '@/components/HeroCarousel'
 import { CategoryCarousel } from '@/components/CategoryCarousel'
-import { RecRail } from '@/components/RecRail'
-import { InteractionProvider } from '@/components/InteractionProvider'
+import { ForYouRail } from '@/components/ForYouRail'
 import { AuthNav } from '@/components/AuthNav'
-import { getUser } from '@/lib/auth/server'
 import { BackToTopButton } from '@/components/BackToTopButton'
 import { HeaderHeightSync } from '@/components/HeaderHeightSync'
 import { listEvents, countEvents, listEventsForMap, getDistinctSources, type City } from '@/lib/db'
@@ -25,11 +23,10 @@ import { SEO_PAGES } from '@/lib/seoPages'
 import { isRecsCity } from '@/lib/recs/config'
 import type { EnrichedEvent } from '@/lib/types'
 
-// Rendered per request: the layout depends on whether the visitor is signed in
-// (logged-out sees a landing with categories + trending; signed-in sees trending
-// + suggested + the full list), which is read from the Supabase session server-
-// side, so this page can't be statically cached.
-export const dynamic = 'force-dynamic'
+// Content changes about once a day (the ingest cron), so serve cached HTML and
+// revalidate every 15 minutes instead of re-querying on every request. Filtered
+// views (which read searchParams) still render dynamically.
+export const revalidate = 900
 
 function first(v: string | string[] | undefined): string | undefined {
   return typeof v === 'string' ? v : Array.isArray(v) ? v[0] : undefined
@@ -186,12 +183,6 @@ export default async function CityHomePage({
   const base = `/${city.slug}`
   const sources = await getDistinctSources(city.id)
 
-  // Signed-in visitors get the personalized layout; the catalog is Austin-only
-  // for recs, so other cities keep the classic category + list experience.
-  const { user } = await getUser()
-  const authed = !!user
-  const recs = isRecsCity(citySlug)
-
   return (
     <div className="min-h-screen bg-background">
       <HeaderHeightSync />
@@ -284,26 +275,19 @@ export default async function CityHomePage({
         </div>
       </section>
 
-      {/* Two views. Logged-out (or non-recs cities): Browse by Category, then a
-          Trending rail — a landing, no full list. Signed-in: Trending + Suggested
-          rails, then the full events list; no category row. The provider gives
-          every EventCard working save/interested/hide buttons for signed-in users. */}
-      <InteractionProvider city={city.slug} authed={recs && authed}>
-        {/* Browse by category — a bold, single-click way into a filtered result
-            set; SidebarFilters below still handles multi-select refinement. */}
-        {(!recs || !authed) && (
-          <section className="border-b border-border bg-card/50">
-            <div className="max-w-7xl mx-auto px-4 py-6">
-              <h2 className="font-display text-lg font-semibold text-foreground mb-3">Browse by category</h2>
-              <CategoryCarousel basePath={base} />
-            </div>
-          </section>
-        )}
+      {/* Personalized rail (Austin-only at launch). A client island fetched
+          per-visitor, so the ISR-cached page HTML stays impersonal. */}
+      {isRecsCity(citySlug) && <ForYouRail city={city.slug} basePath={base} />}
 
-        {recs && <RecRail city={city.slug} basePath={base} mode="trending" />}
-        {recs && authed && <RecRail city={city.slug} basePath={base} mode="suggested" />}
+      {/* Category carousel — a bold, single-click way into a filtered result
+          set; SidebarFilters below still handles multi-select refinement. */}
+      <section className="border-b border-border bg-card/50">
+        <div className="max-w-7xl mx-auto px-4 py-6">
+          <h2 className="font-display text-lg font-semibold text-foreground mb-3">Browse by category</h2>
+          <CategoryCarousel basePath={base} />
+        </div>
+      </section>
 
-        {(!recs || authed) && (
       <div className="max-w-7xl mx-auto px-4 py-6 flex gap-8">
         <div
           className="hidden md:block w-52 shrink-0 self-start sticky max-h-[calc(100vh-6rem)] overflow-y-auto pt-1 space-y-6"
@@ -381,8 +365,6 @@ export default async function CityHomePage({
           )}
         </main>
       </div>
-        )}
-      </InteractionProvider>
 
       <BackToTopButton />
     </div>

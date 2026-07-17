@@ -3,7 +3,6 @@ import Image from 'next/image'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { FeaturedBadge } from './FeaturedBadge'
-import { EventCardActions } from './EventCardActions'
 import { getTicketProvider } from '@/lib/tickets'
 import type { EnrichedEvent } from '@/lib/types'
 
@@ -12,14 +11,9 @@ type Props = {
   basePath: string
   featured?: boolean
   featuredLabel?: string
-  // Recommendation context (optional): serveId credits the impression, onHide
-  // lets a rail drop the card. The action buttons themselves only render for
-  // signed-in users (via InteractionProvider); everywhere else this is a no-op.
-  serveId?: string | null
-  onHide?: (id: string) => void
 }
 
-export function EventCard({ event, basePath, featured = false, featuredLabel, serveId = null, onHide }: Props) {
+export function EventCard({ event, basePath, featured = false, featuredLabel }: Props) {
   const date = new Date(event.start_time)
   const dateStr = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
   const timeStr = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
@@ -41,7 +35,6 @@ export function EventCard({ event, basePath, featured = false, featuredLabel, se
   return (
     <Card className={`relative overflow-hidden h-full flex flex-col transition-all hover:shadow-lg hover:-translate-y-0.5 ${featured ? 'ring-2 ring-primary shadow-primary/10' : ''}`}>
       {featured && <FeaturedBadge label={featuredLabel} />}
-      <EventCardActions eventId={event.id} serveId={serveId} onHide={onHide} />
 
       <Link href={`${basePath}/events/${event.id}`} className="block group flex-1">
         {event.image_url ? (
