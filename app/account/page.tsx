@@ -1,24 +1,16 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { currentUser } from '@/lib/auth/server'
-import {
-  getCityBySlug,
-  getDistinctNeighborhoods,
-  listUserInterests,
-  listFavoriteIds,
-  listInterestedEventIds,
-  listHiddenEventIds,
-  getEventsByIds,
-  getDigestSubscription,
-} from '@/lib/db'
+import { getUser } from '@/lib/auth/server'
+import { getCityBySlug, getDistinctNeighborhoods, getEventsByIds } from '@/lib/db'
+import { listUserInterests, listFavoriteIds, listInterestedEventIds, listHiddenEventIds } from '@/lib/user/data'
 import { CATEGORIES } from '@/lib/categories'
 import { AccountView } from '@/components/AccountView'
 import type { SurveyPrefs } from '@/lib/recs/interests'
 
-// The account/settings page. Session-gated; dynamic because it reads the session
-// cookie. Loads the user's interests, saved/interested/hidden events, and digest
-// status server-side, then hands them to the client editor.
+// The account/settings page. Session-gated via Supabase; dynamic because it reads
+// the session. User-private data comes through the RLS-scoped client; catalog
+// details (the saved/interested/hidden event cards) via the pg service path.
 export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
@@ -48,19 +40,18 @@ function toLite(e: { id: string; title?: unknown; start_time?: unknown; venue_na
 }
 
 export default async function AccountPage() {
-  const user = await currentUser()
+  const { supabase, user } = await getUser()
   if (!user) redirect(`/signin?redirect=/account`)
 
-  const actor = { userId: user.id, anonId: null }
   const city = await getCityBySlug(RECS_CITY)
-
-  const [interests, favIds, intIds, hidIds, neighborhoods, digest] = await Promise.all([
-    listUserInterests(user.id),
-    listFavoriteIds(actor),
-    listInterestedEventIds(actor),
-    listHiddenEventIds(actor),
+  const [prof, interests, favIds, intIds, hidIds, neighborhoods, digestRes] = await Promise.all([
+    supabase.from('profiles').select('display_name, personalization_opt_out').eq('id', user.id).maybeSingle(),
+    listUserInterests(supabase),
+    listFavoriteIds(supabase),
+    listInterestedEventIds(supabase),
+    listHiddenEventIds(supabase),
     city ? getDistinctNeighborhoods(city.id) : Promise.resolve<string[]>([]),
-    city ? getDigestSubscription(user.email, city.id) : Promise.resolve(null),
+    supabase.from('subscriptions').select('frequency, confirmed').eq('city_id', city?.id ?? 0).maybeSingle(),
   ])
 
   const [favorites, interested, hidden] = await Promise.all([
@@ -68,6 +59,10 @@ export default async function AccountPage() {
     getEventsByIds(intIds),
     getEventsByIds(hidIds),
   ])
+
+  const digest = digestRes.data
+    ? { frequency: digestRes.data.frequency as string, confirmed: !!digestRes.data.confirmed }
+    : null
 
   return (
     <div className="min-h-screen bg-background">
@@ -80,16 +75,16 @@ export default async function AccountPage() {
       <main className="max-w-3xl mx-auto px-4 py-8">
         <h1 className="font-display text-2xl font-semibold mb-6">Your account</h1>
         <AccountView
-          email={user.email}
-          displayName={user.display_name}
-          personalizationOptOut={user.personalization_opt_out}
+          email={user.email ?? ''}
+          displayName={(prof.data?.display_name as string | null) ?? null}
+          personalizationOptOut={!!prof.data?.personalization_opt_out}
           prefs={groupInterests(interests)}
           categories={CATEGORIES.map(c => ({ slug: c.slug, name: c.name, color: c.color }))}
           neighborhoods={neighborhoods}
           favorites={favorites.map(toLite)}
           interested={interested.map(toLite)}
           hidden={hidden.map(toLite)}
-          digest={digest ? { frequency: digest.frequency, confirmed: digest.confirmed } : null}
+          digest={digest}
         />
       </main>
     </div>

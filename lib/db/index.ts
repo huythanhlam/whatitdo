@@ -1097,51 +1097,6 @@ export async function listActorAffinity(
 // Recommendations — serving (the ranking model at request time)
 // ---------------------------------------------------------------------------
 
-// Build the "kind:value" affinity map + taste vector for one actor.
-async function getActorTaste(db: Db, actor: Actor): Promise<ActorTaste> {
-  const col = actor.userId ? 'user_id' : 'anon_id'
-  const id = actor.userId ?? actor.anonId
-  if (!id) return { affinity: new Map(), vector: null }
-  const [affRows, vecRows] = await Promise.all([
-    db.query<{ kind: string; value: string; score: number }>(
-      `SELECT kind, value, score FROM user_affinity WHERE ${col} = $1`,
-      [id]
-    ),
-    db.query<{ vec: number[] }>(`SELECT vec FROM user_vectors WHERE ${col} = $1`, [id]),
-  ])
-  const affinity = new Map<string, number>()
-  for (const r of affRows) affinity.set(`${r.kind}:${r.value}`, r.score)
-  return { affinity, vector: vecRows[0]?.vec ?? null }
-}
-
-// Events this actor has hidden ("not interested") and their per-event view
-// counts — the exclusion set and the seen_count feature, in two small queries.
-async function getActorEventState(
-  db: Db,
-  actor: Actor
-): Promise<{ hidden: Set<string>; seen: Map<string, number> }> {
-  const col = actor.userId ? 'user_id' : 'anon_id'
-  const id = actor.userId ?? actor.anonId
-  if (!id) return { hidden: new Set(), seen: new Map() }
-  const [hiddenRows, seenRows] = await Promise.all([
-    db.query<{ event_id: string }>(
-      `SELECT DISTINCT event_id FROM interactions
-       WHERE ${col} = $1 AND type = 'hide' AND event_id IS NOT NULL`,
-      [id]
-    ),
-    db.query<{ event_id: string; n: number }>(
-      `SELECT event_id, COUNT(*)::int AS n FROM interactions
-       WHERE ${col} = $1 AND type = 'view' AND event_id IS NOT NULL
-       GROUP BY event_id`,
-      [id]
-    ),
-  ])
-  return {
-    hidden: new Set(hiddenRows.map(r => r.event_id)),
-    seen: new Map(seenRows.map(r => [r.event_id, r.n])),
-  }
-}
-
 export type RecImpressionItem = {
   eventId: string
   position: number
@@ -1155,7 +1110,8 @@ export type RecImpressionItem = {
 // lib/recs/score; this function only assembles inputs and maps outputs.
 export async function listRecommendedEvents(
   cityId: number,
-  actor: Actor,
+  taste: ActorTaste,
+  state: { hidden: Set<string>; seen: Map<string, number> },
   opts: { limit?: number } = {}
 ): Promise<{
   events: EnrichedEvent[]
@@ -1172,22 +1128,21 @@ export async function listRecommendedEvents(
   const model = await getActiveModel()
   if (!model) return { events: [], impressions: [], modelVersion: 0, personalized: false }
 
-  const [rows, taste, state] = await Promise.all([
-    db.query<Record<string, unknown>>(
-      `SELECT e.*, ${CATEGORIES_JSON}, ${FEATURED_JSON},
-         ee.score AS engagement_score, v.neighborhood
-       FROM events e
-       LEFT JOIN event_engagement ee ON ee.event_id = e.id
-       LEFT JOIN venues v ON v.city_id = e.city_id AND v.venue_norm = e.venue_norm AND v.status = 'ok'
-       WHERE e.city_id = $1 AND e.status = 'approved'
-         AND e.start_time >= $2 AND e.start_time <= $3
-       ORDER BY e.start_time ASC
-       LIMIT $4`,
-      [cityId, nowIso, toIso, RECS_CANDIDATE_CAP]
-    ),
-    getActorTaste(db, actor),
-    getActorEventState(db, actor),
-  ])
+  // Candidate catalog read (public event metadata, on the pg service path). The
+  // actor's taste + event-state come from the caller (the RLS-scoped Supabase
+  // client), so serving stays a pure assembly + ranking step.
+  const rows = await db.query<Record<string, unknown>>(
+    `SELECT e.*, ${CATEGORIES_JSON}, ${FEATURED_JSON},
+       ee.score AS engagement_score, v.neighborhood
+     FROM events e
+     LEFT JOIN event_engagement ee ON ee.event_id = e.id
+     LEFT JOIN venues v ON v.city_id = e.city_id AND v.venue_norm = e.venue_norm AND v.status = 'ok'
+     WHERE e.city_id = $1 AND e.status = 'approved'
+       AND e.start_time >= $2 AND e.start_time <= $3
+     ORDER BY e.start_time ASC
+     LIMIT $4`,
+    [cityId, nowIso, toIso, RECS_CANDIDATE_CAP]
+  )
 
   // Split each row into a scoring Candidate and a render row (embedding stripped
   // so a 768-float array never ships to the client).

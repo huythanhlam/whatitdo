@@ -1,32 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getCityBySlug, getDistinctNeighborhoods } from '@/lib/db'
+import { getUser } from '@/lib/auth/server'
+import { createServiceClient } from '@/lib/supabase/service'
 import {
-  getUserById,
   listUserInterests,
   setUserInterests,
   setExplicitAffinities,
-  updateUserProfile,
-  clearActorHistory,
+  updateProfile,
+  clearHistory,
   unhideEvent,
-  deleteUser,
-  getCityBySlug,
-  getDistinctNeighborhoods,
-} from '@/lib/db'
-import { requireSessionUser } from '@/lib/auth/actor'
-import { SID_COOKIE, clearSidCookieOptions } from '@/lib/auth/session'
+} from '@/lib/user/data'
 import { CATEGORY_SLUGS } from '@/lib/categories'
 import { EXPLICIT_AFFINITY_SCORE } from '@/lib/recs/config'
 import { surveyToAffinityKeys, surveyToInterestRows, type SurveyPrefs } from '@/lib/recs/interests'
 
-// The account settings surface, all session-gated:
+// Account settings, all session-gated via the Supabase session:
 //   GET    — current profile + interests (grouped for the editor)
-//   PATCH  — update display name, personalization opt-out, and/or interests
+//   PATCH  — display name, personalization opt-out, and/or interests
 //   POST   — privacy actions: { action: 'clearHistory' | 'unhide', eventId? }
-//   DELETE — delete the account (and clear the session cookie)
+//   DELETE — delete the account (service client → auth.admin.deleteUser, cascades)
 
 const RECS_CITY = 'austin'
 const NO_STORE = { 'Cache-Control': 'private, no-store' }
 
-// Fold the flat user_interests rows back into the survey shape the editor uses.
 function groupInterests(rows: { kind: string; value: string }[]): SurveyPrefs {
   return {
     categories: rows.filter(r => r.kind === 'category').map(r => r.value),
@@ -36,20 +32,31 @@ function groupInterests(rows: { kind: string; value: string }[]): SurveyPrefs {
   }
 }
 
-export async function GET(req: NextRequest) {
-  const userId = await requireSessionUser(req)
-  if (!userId) return NextResponse.json({ error: 'Not signed in' }, { status: 401, headers: NO_STORE })
-  const user = await getUserById(userId)
+async function cleanPrefs(p: { categories?: unknown; neighborhoods?: unknown; freeOnly?: unknown; days?: unknown }): Promise<SurveyPrefs> {
+  const rawCats = Array.isArray(p.categories) ? p.categories : []
+  const categories = rawCats.filter((s: unknown): s is string => typeof s === 'string' && (CATEGORY_SLUGS as string[]).includes(s))
+  const city = await getCityBySlug(RECS_CITY)
+  const known = city ? await getDistinctNeighborhoods(city.id) : []
+  const rawHoods = Array.isArray(p.neighborhoods) ? p.neighborhoods : []
+  const neighborhoods = rawHoods.filter((n: unknown): n is string => typeof n === 'string' && known.includes(n))
+  const rawDays = Array.isArray(p.days) ? p.days : []
+  const days = Array.from(new Set(rawDays.filter((d: unknown): d is number => typeof d === 'number' && Number.isInteger(d) && d >= 0 && d <= 6)))
+  return { categories, neighborhoods, freeOnly: p.freeOnly === true, days }
+}
+
+export async function GET() {
+  const { supabase, user } = await getUser()
   if (!user) return NextResponse.json({ error: 'Not signed in' }, { status: 401, headers: NO_STORE })
-  const interests = await listUserInterests(userId)
+  const { data: prof } = await supabase.from('profiles').select('display_name, home_city_id, personalization_opt_out, onboarded_at').eq('id', user.id).maybeSingle()
+  const interests = await listUserInterests(supabase)
   return NextResponse.json(
     {
       user: {
         email: user.email,
-        displayName: user.display_name,
-        homeCityId: user.home_city_id,
-        personalizationOptOut: user.personalization_opt_out,
-        onboardedAt: user.onboarded_at,
+        displayName: prof?.display_name ?? null,
+        homeCityId: prof?.home_city_id ?? null,
+        personalizationOptOut: prof?.personalization_opt_out ?? false,
+        onboardedAt: prof?.onboarded_at ?? null,
       },
       prefs: groupInterests(interests),
     },
@@ -58,52 +65,34 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const userId = await requireSessionUser(req)
-  if (!userId) return NextResponse.json({ error: 'Not signed in' }, { status: 401, headers: NO_STORE })
+  const { supabase, user } = await getUser()
+  if (!user) return NextResponse.json({ error: 'Not signed in' }, { status: 401, headers: NO_STORE })
 
-  let body: {
-    displayName?: unknown
-    personalizationOptOut?: unknown
-    prefs?: { categories?: unknown; neighborhoods?: unknown; freeOnly?: unknown; days?: unknown }
-  }
+  let body: { displayName?: unknown; personalizationOptOut?: unknown; prefs?: SurveyPrefs }
   try {
     body = await req.json()
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400, headers: NO_STORE })
   }
 
-  const patch: { displayName?: string | null; personalizationOptOut?: boolean } = {}
-  if (typeof body.displayName === 'string') patch.displayName = body.displayName.trim().slice(0, 80) || null
-  else if (body.displayName === null) patch.displayName = null
-  if (typeof body.personalizationOptOut === 'boolean') patch.personalizationOptOut = body.personalizationOptOut
-  if (Object.keys(patch).length > 0) await updateUserProfile(userId, patch)
+  const patch: { display_name?: string | null; personalization_opt_out?: boolean } = {}
+  if (typeof body.displayName === 'string') patch.display_name = body.displayName.trim().slice(0, 80) || null
+  else if (body.displayName === null) patch.display_name = null
+  if (typeof body.personalizationOptOut === 'boolean') patch.personalization_opt_out = body.personalizationOptOut
+  if (Object.keys(patch).length > 0) await updateProfile(supabase, patch)
 
-  // Interests edit (source 'profile' — overrides onboarding weights).
   if (body.prefs) {
-    const p = body.prefs
-    const rawCats = Array.isArray(p.categories) ? p.categories : []
-    const categories = rawCats.filter(
-      (s: unknown): s is string => typeof s === 'string' && (CATEGORY_SLUGS as string[]).includes(s)
-    )
-    const city = await getCityBySlug(RECS_CITY)
-    const known = city ? await getDistinctNeighborhoods(city.id) : []
-    const rawHoods = Array.isArray(p.neighborhoods) ? p.neighborhoods : []
-    const neighborhoods = rawHoods.filter((n: unknown): n is string => typeof n === 'string' && known.includes(n))
-    const rawDays = Array.isArray(p.days) ? p.days : []
-    const days = Array.from(
-      new Set(rawDays.filter((d: unknown): d is number => typeof d === 'number' && Number.isInteger(d) && d >= 0 && d <= 6))
-    )
-    const prefs: SurveyPrefs = { categories, neighborhoods, freeOnly: p.freeOnly === true, days }
-    await setUserInterests(userId, 'profile', surveyToInterestRows(prefs))
-    await setExplicitAffinities(userId, surveyToAffinityKeys(prefs), EXPLICIT_AFFINITY_SCORE)
+    const prefs = await cleanPrefs(body.prefs)
+    await setUserInterests(supabase, user.id, 'profile', surveyToInterestRows(prefs))
+    await setExplicitAffinities(supabase, user.id, surveyToAffinityKeys(prefs), EXPLICIT_AFFINITY_SCORE)
   }
 
   return NextResponse.json({ ok: true }, { headers: NO_STORE })
 }
 
 export async function POST(req: NextRequest) {
-  const userId = await requireSessionUser(req)
-  if (!userId) return NextResponse.json({ error: 'Not signed in' }, { status: 401, headers: NO_STORE })
+  const { supabase, user } = await getUser()
+  if (!user) return NextResponse.json({ error: 'Not signed in' }, { status: 401, headers: NO_STORE })
 
   let body: { action?: unknown; eventId?: unknown }
   try {
@@ -112,23 +101,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400, headers: NO_STORE })
   }
 
-  const actor = { userId, anonId: null }
   if (body.action === 'clearHistory') {
-    await clearActorHistory(actor)
+    await clearHistory(supabase)
     return NextResponse.json({ ok: true }, { headers: NO_STORE })
   }
   if (body.action === 'unhide' && typeof body.eventId === 'string') {
-    await unhideEvent(actor, body.eventId)
+    await unhideEvent(supabase, body.eventId)
     return NextResponse.json({ ok: true }, { headers: NO_STORE })
   }
   return NextResponse.json({ error: 'Unknown action' }, { status: 400, headers: NO_STORE })
 }
 
-export async function DELETE(req: NextRequest) {
-  const userId = await requireSessionUser(req)
-  if (!userId) return NextResponse.json({ error: 'Not signed in' }, { status: 401, headers: NO_STORE })
-  await deleteUser(userId) // FK cascade drops the session too; clear the cookie as well
-  const res = NextResponse.json({ ok: true }, { headers: NO_STORE })
-  res.cookies.set(SID_COOKIE, '', clearSidCookieOptions())
-  return res
+export async function DELETE() {
+  const { user } = await getUser()
+  if (!user) return NextResponse.json({ error: 'Not signed in' }, { status: 401, headers: NO_STORE })
+  // Deleting the auth user cascades profile + all behavioral rows (FKs). Requires
+  // the service client (admin API); the user's own session can't delete itself.
+  const svc = createServiceClient()
+  await svc.auth.admin.deleteUser(user.id)
+  return NextResponse.json({ ok: true }, { headers: NO_STORE })
 }
