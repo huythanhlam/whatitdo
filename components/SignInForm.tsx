@@ -10,9 +10,14 @@ import { createClient } from '@/lib/supabase/browser'
 // Passwordless sign-in via Supabase Auth (email magic link / OTP). The "email me
 // the digest" opt-in rides along in user metadata and is applied in the callback.
 // No password; the link returns to /auth/callback which opens the session.
-export function SignInForm() {
+//
+// The post-auth destination comes from `redirectTo` when provided (the "join"
+// gate passes the CTA's intended landing spot) and otherwise falls back to the
+// `?redirect=` search param (the standalone /signin page). It is threaded to
+// /auth/callback as `next`, which the callback carries through onboarding.
+export function SignInForm({ redirectTo }: { redirectTo?: string }) {
   const params = useSearchParams()
-  const redirect = params.get('redirect') ?? ''
+  const redirect = redirectTo ?? params.get('redirect') ?? ''
   const linkError = params.get('error') === 'link'
 
   const [email, setEmail] = useState('')

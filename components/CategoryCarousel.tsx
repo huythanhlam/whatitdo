@@ -26,7 +26,12 @@ const ICONS: Record<CategorySlug, LucideIcon> = {
 // that deep-link straight into the filtered results below, distinct from
 // SidebarFilters' checkbox facets (which stay for refining once you're
 // already browsing a result set).
-export function CategoryCarousel({ basePath }: { basePath: string }) {
+//
+// When `gated` (a logged-out visitor on a recs city), tiles route through the
+// /join registration gate carrying the category intent instead of jumping
+// straight to the filtered list; the gate hands them back here (filtered) once
+// they've signed in and onboarded.
+export function CategoryCarousel({ basePath, gated = false }: { basePath: string; gated?: boolean }) {
   const trackRef = useRef<HTMLDivElement>(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
@@ -77,10 +82,13 @@ export function CategoryCarousel({ basePath }: { basePath: string }) {
       >
         {CATEGORIES.map(cat => {
           const Icon = ICONS[cat.slug]
+          const href = gated
+            ? `${basePath}/join?intent=category&cat=${cat.slug}`
+            : `${basePath}?category=${cat.slug}#events`
           return (
             <Link
               key={cat.slug}
-              href={`${basePath}?category=${cat.slug}#events`}
+              href={href}
               className="group flex shrink-0 flex-col items-center gap-2 w-20 sm:w-24"
             >
               <span

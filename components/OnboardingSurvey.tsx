@@ -31,12 +31,17 @@ export function OnboardingSurvey({
   topEvents,
   city,
   basePath,
+  next,
 }: {
   categories: Cat[]
   neighborhoods: string[]
   topEvents: RecEvent[]
   city: string
   basePath: string
+  // Where to land after finishing/skipping — the destination the landing CTA
+  // promised (full list, weekend filter, or a category). Falls back to the city
+  // home when a visitor reached onboarding without an intent.
+  next?: string
 }) {
   const router = useRouter()
   const [step, setStep] = useState(1)
@@ -76,7 +81,7 @@ export function OnboardingSurvey({
     } catch {
       // Best-effort — even if this fails, don't trap the user in onboarding.
     }
-    router.push(basePath)
+    router.push(next || basePath)
   }
 
   return (
