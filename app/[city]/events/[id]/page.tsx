@@ -2,12 +2,16 @@ import Link from 'next/link'
 import Image from 'next/image'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { getEvent as fetchEvent, getCityBySlug } from '@/lib/db'
 import { requireCity } from '@/lib/cities'
 import { getTicketProvider } from '@/lib/tickets'
 import { getBaseUrl } from '@/lib/site'
+import { cn } from '@/lib/utils'
+import { isRecsCity } from '@/lib/recs/config'
+import { TrackBeacon } from '@/components/TrackBeacon'
+import { TicketLink } from '@/components/TicketLink'
 import type { EnrichedEvent } from '@/lib/types'
 
 // Event content changes rarely once ingested; cache each detail page and
@@ -64,6 +68,8 @@ export default async function EventDetailPage({
   const provider = getTicketProvider(event.ticket_url)
   const ticketCta = provider ? (event.is_free ? 'RSVP / Details' : provider.cta) : null
   const jsonLd = eventJsonLd(event, citySlug, city.name)
+  // Personalization is Austin-only at launch; only then do we log view/clickout.
+  const recsOn = isRecsCity(citySlug)
   // Cross-source provenance: the distinct other sources that also listed this
   // canonical event (dedup merges them into one record). Empty for single-source events.
   const otherSources = Array.from(new Set((event.sources ?? []).map(s => s.source)))
@@ -72,6 +78,7 @@ export default async function EventDetailPage({
   return (
     <div className="min-h-screen bg-background">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      {recsOn && <TrackBeacon eventId={event.id} city={citySlug} />}
       <header className="border-b bg-card/95 sticky top-0 z-40">
         <div className="max-w-3xl mx-auto px-4 py-3">
           <Link href={`/${citySlug}`} className="text-sm text-primary hover:underline">← Back to events</Link>
@@ -126,11 +133,22 @@ export default async function EventDetailPage({
 
         <div className="flex gap-3 flex-wrap">
           {event.ticket_url && ticketCta && (
-            <Button asChild className="bg-primary hover:bg-primary/90">
-              <a href={event.ticket_url} target="_blank" rel="noopener noreferrer">
+            recsOn ? (
+              <TicketLink
+                href={event.ticket_url}
+                eventId={event.id}
+                city={citySlug}
+                className={cn(buttonVariants(), 'bg-primary hover:bg-primary/90')}
+              >
                 🎟 {ticketCta} →
-              </a>
-            </Button>
+              </TicketLink>
+            ) : (
+              <Button asChild className="bg-primary hover:bg-primary/90">
+                <a href={event.ticket_url} target="_blank" rel="noopener noreferrer">
+                  🎟 {ticketCta} →
+                </a>
+              </Button>
+            )
           )}
           <Button variant="outline" asChild>
             <Link href={`/${citySlug}/subscribe`}>🔔 Get event alerts</Link>

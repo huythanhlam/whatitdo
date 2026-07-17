@@ -3,6 +3,22 @@ import { getPgDb } from './pg'
 import { getPgliteDb } from './pglite'
 import type { RawEvent, SourceRow } from '@/lib/sources/types'
 import type { ExistingEvent, Candidate, FieldPatch } from '@/lib/dedup'
+import type { Actor } from '@/lib/auth/session'
+import {
+  SIGNAL_MAGNITUDE,
+  POSITIVE_ENGAGEMENT_TYPES,
+  EMA_ALPHA,
+  ENGAGEMENT_PRIOR_STRENGTH,
+  DEFAULT_CITY_ENGAGEMENT_RATE,
+  type InteractionType,
+  type ModelWeights,
+} from '@/lib/recs/config'
+import {
+  affinityKeysForEvent,
+  signalTarget,
+  bayesianEngagementScore,
+  type EventSignalContext,
+} from '@/lib/recs/affinity'
 
 // Returns true when no direct Postgres connection is configured — the app then
 // runs against an embedded local Postgres (PGlite) so it works with zero
@@ -834,4 +850,189 @@ export async function getEventsBetween(cityId: number, startIso: string, endIso:
     [cityId, startIso, endIso]
   )
   return rows.map(r => enrichRow(r, nowIso))
+}
+
+// ---------------------------------------------------------------------------
+// Recommendations — signal capture + write-through feature updates
+//
+// One entry point, recordInteraction, does everything a tracked signal implies:
+// append to the interaction log, nudge the actor's per-facet affinities (an EMA,
+// so the rail reacts within a session), bump the event's engagement prior (so
+// trending is real-time, no cron), and mark the originating recommendation
+// impression engaged. All of it is best-effort — callers wrap it so a tracking
+// failure never breaks the user's action.
+// ---------------------------------------------------------------------------
+
+// The active ranking model. Serving reads exactly one row (status='active'); v1
+// is the seeded prior until nightly training promotes a trained successor.
+export async function getActiveModel(): Promise<{ id: number; weights: ModelWeights } | null> {
+  const db = await getDb()
+  const rows = await db.query<{ id: number; weights: ModelWeights }>(
+    `SELECT id, weights FROM model_versions WHERE status = 'active' ORDER BY id DESC LIMIT 1`
+  )
+  return rows[0] ?? null
+}
+
+// The minimal event facts a signal needs to update affinities, plus the event's
+// city (used to stamp the interaction when the caller didn't supply one).
+async function getEventSignalContext(
+  eventId: string
+): Promise<(EventSignalContext & { cityId: number }) | null> {
+  const db = await getDb()
+  const rows = await db.query<{
+    city_id: number
+    venue_norm: string | null
+    is_free: boolean
+    start_time: string
+    category_slugs: string[]
+  }>(
+    `SELECT e.city_id, e.venue_norm, e.is_free, e.start_time,
+       COALESCE((
+         SELECT array_agg(c.slug)
+         FROM event_categories ec JOIN categories c ON c.id = ec.category_id
+         WHERE ec.event_id = e.id
+       ), '{}') AS category_slugs
+     FROM events e WHERE e.id = $1`,
+    [eventId]
+  )
+  const r = rows[0]
+  if (!r) return null
+  return {
+    cityId: r.city_id,
+    venueNorm: r.venue_norm,
+    isFree: !!r.is_free,
+    startTime: r.start_time,
+    categorySlugs: r.category_slugs ?? [],
+  }
+}
+
+// Blend one affinity observation into an actor's stored EMA. The conflict target
+// is the actor's partial unique index (user rows and anon rows are distinct), so
+// concurrent signals upsert safely instead of racing an insert.
+async function upsertAffinity(
+  db: Db,
+  actor: Actor,
+  kind: string,
+  value: string,
+  alphaTarget: number,
+  oneMinusAlpha: number
+): Promise<void> {
+  if (actor.userId) {
+    await db.query(
+      `INSERT INTO user_affinity (user_id, kind, value, score)
+       VALUES ($1, $2, $3, $4::real)
+       ON CONFLICT (user_id, kind, value) WHERE user_id IS NOT NULL
+       DO UPDATE SET score = $4::real + $5::real * user_affinity.score, computed_at = NOW()`,
+      [actor.userId, kind, value, alphaTarget, oneMinusAlpha]
+    )
+  } else if (actor.anonId) {
+    await db.query(
+      `INSERT INTO user_affinity (anon_id, kind, value, score)
+       VALUES ($1, $2, $3, $4::real)
+       ON CONFLICT (anon_id, kind, value) WHERE anon_id IS NOT NULL
+       DO UPDATE SET score = $4::real + $5::real * user_affinity.score, computed_at = NOW()`,
+      [actor.anonId, kind, value, alphaTarget, oneMinusAlpha]
+    )
+  }
+}
+
+// Record a signal and apply every downstream feature update it implies.
+// Best-effort: the caller (the /api/track beacon) treats failures as no-ops.
+export async function recordInteraction(params: {
+  actor: Actor
+  type: InteractionType
+  eventId?: string | null
+  cityId?: number | null
+  query?: string | null
+  serveId?: string | null
+}): Promise<void> {
+  const { actor, type } = params
+  if (!actor.userId && !actor.anonId) return // nothing to attach the signal to
+  const db = await getDb()
+
+  const ctx = params.eventId ? await getEventSignalContext(params.eventId) : null
+  const cityId = params.cityId ?? ctx?.cityId ?? null
+
+  await db.query(
+    `INSERT INTO interactions (user_id, anon_id, city_id, event_id, type, serve_id, query)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [
+      actor.userId,
+      actor.anonId,
+      cityId,
+      params.eventId ?? null,
+      type,
+      params.serveId ?? null,
+      params.query ?? null,
+    ]
+  )
+
+  // Affinity: any event-bound signal with a non-zero magnitude nudges the
+  // actor's taste for that event's categories/venue/day/price.
+  const magnitude = SIGNAL_MAGNITUDE[type] ?? 0
+  if (ctx && magnitude !== 0) {
+    const target = signalTarget(magnitude)
+    const alphaTarget = EMA_ALPHA * target
+    const oneMinusAlpha = 1 - EMA_ALPHA
+    for (const key of affinityKeysForEvent(ctx)) {
+      await upsertAffinity(db, actor, key.kind, key.value, alphaTarget, oneMinusAlpha)
+    }
+  }
+
+  // Engagement prior: only true positive engagement counts. Impressions are
+  // incremented at serve time (once serving ships), so here we bump engagements
+  // and recompute the Bayesian score against the city-average prior.
+  if (params.eventId && POSITIVE_ENGAGEMENT_TYPES.has(type)) {
+    const freshScore = bayesianEngagementScore(1, 0)
+    await db.query(
+      `INSERT INTO event_engagement (event_id, impressions, engagements, score)
+       VALUES ($1, 0, 1, $2::real)
+       ON CONFLICT (event_id) DO UPDATE SET
+         engagements = event_engagement.engagements + 1,
+         score = (event_engagement.engagements + 1 + $3::real * $4::real)
+                 / (event_engagement.impressions + $3::real),
+         updated_at = NOW()`,
+      [params.eventId, freshScore, ENGAGEMENT_PRIOR_STRENGTH, DEFAULT_CITY_ENGAGEMENT_RATE]
+    )
+
+    // Close the loop: a positive signal on a recommended event marks that
+    // impression engaged — the training label for the model.
+    if (params.serveId) {
+      await db.query(
+        `UPDATE rec_impressions SET engaged = true WHERE serve_id = $1 AND event_id = $2`,
+        [params.serveId, params.eventId]
+      )
+    }
+  }
+}
+
+// Read helpers — used by tests today, by the rail/profile later.
+export async function getEventEngagement(
+  eventId: string
+): Promise<{ impressions: number; engagements: number; score: number } | null> {
+  const db = await getDb()
+  const rows = await db.query<{ impressions: number; engagements: number; score: number }>(
+    `SELECT impressions, engagements, score FROM event_engagement WHERE event_id = $1`,
+    [eventId]
+  )
+  return rows[0] ?? null
+}
+
+export async function listActorAffinity(
+  actor: Actor
+): Promise<{ kind: string; value: string; score: number }[]> {
+  const db = await getDb()
+  if (actor.userId) {
+    return db.query(
+      `SELECT kind, value, score FROM user_affinity WHERE user_id = $1 ORDER BY score DESC`,
+      [actor.userId]
+    )
+  }
+  if (actor.anonId) {
+    return db.query(
+      `SELECT kind, value, score FROM user_affinity WHERE anon_id = $1 ORDER BY score DESC`,
+      [actor.anonId]
+    )
+  }
+  return []
 }
