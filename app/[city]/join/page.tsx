@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { redirect } from 'next/navigation'
 import { MapPin, ArrowLeft, Bookmark, Sparkles, CalendarHeart, Check } from 'lucide-react'
-import { SignInForm } from '@/components/SignInForm'
+import { SignUpForm } from '@/components/SignUpForm'
 import { getUser } from '@/lib/auth/server'
 import { requireCity } from '@/lib/cities'
 import { isRecsCity } from '@/lib/recs/config'
@@ -163,7 +163,7 @@ export default async function JoinPage({
             Create a free account to unlock {copy.lead}.
           </h1>
           <p className="mt-4 max-w-md text-base text-muted-foreground text-balance">
-            It takes about a minute. No password — just your email and a one-time magic link.
+            It takes less than a minute — just your email and a password, and you’re in.
           </p>
 
           <ul className="mt-8 space-y-4">
@@ -214,11 +214,11 @@ export default async function JoinPage({
             </p>
             <div className="mt-5">
               <Suspense>
-                <SignInForm redirectTo={dest} />
+                <SignUpForm redirectTo={dest} />
               </Suspense>
             </div>
             <ul className="mt-5 space-y-1.5 border-t border-border pt-4">
-              {['Free forever', 'No password to remember', 'Unsubscribe anytime'].map(t => (
+              {['Free forever', 'Takes under a minute', 'Unsubscribe anytime'].map(t => (
                 <li key={t} className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Check className="h-3.5 w-3.5 text-primary" /> {t}
                 </li>
