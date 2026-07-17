@@ -133,27 +133,26 @@ describe('per-user isolation (RLS)', () => {
   })
 })
 
-describe('gated catalog', () => {
-  it('anon cannot read the events catalog at all', async () => {
+describe('public catalog (event metadata is not RLS-gated)', () => {
+  it('anon can read the full events catalog', async () => {
     await actAs(null, 'anon')
-    expect(await rejects(`SELECT id FROM events LIMIT 1`)).toBe(true)
+    const all = await rows<{ n: number }>(`SELECT COUNT(*)::int AS n FROM events`)
+    expect(all[0].n).toBe(eventIds.length)
   })
 
-  it('anon gets only a capped teaser via the RPC', async () => {
-    await actAs(null, 'anon')
-    const few = await rows(`SELECT * FROM public_suggested_events(6)`)
-    expect(few.length).toBeGreaterThan(0)
-    expect(few.length).toBeLessThanOrEqual(6)
-    // The hard cap prevents paging the whole catalog even with a huge limit.
-    const capped = await rows(`SELECT * FROM public_suggested_events(1000)`)
-    expect(capped.length).toBeLessThanOrEqual(12)
-    expect(capped.length).toBeLessThan(eventIds.length) // 15 events exist; anon never sees all
-  })
-
-  it('a signed-in user sees the full catalog', async () => {
+  it('a signed-in user can also read the catalog', async () => {
     await actAs(USER_A, 'authenticated')
     const all = await rows<{ n: number }>(`SELECT COUNT(*)::int AS n FROM events`)
     expect(all[0].n).toBe(eventIds.length)
+  })
+
+  it('anon reads shared engagement aggregates but cannot see any user rows', async () => {
+    await actAs(null, 'anon')
+    // event_engagement is public metadata...
+    await rows(`SELECT * FROM event_engagement`)
+    // ...but favorites and profiles are private: anon sees nothing and can't call
+    // the engagement RPC either.
+    expect(await rejects(`SELECT * FROM favorites`)).toBe(true)
   })
 })
 
