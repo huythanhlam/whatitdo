@@ -16,24 +16,14 @@ function migrationsDir(): string {
   return path.join(process.cwd(), 'supabase', 'migrations')
 }
 
-// Transitional boundary. Migrations 034+ adopt Supabase Auth + RLS: they target
-// the native `auth` schema/roles and are managed by the Supabase CLI stack, not
-// this legacy runner. During the cutover the legacy PGlite/dev path (and this
-// runner) stay on the pre-cutover era (≤ 033); the Supabase-era migrations are
-// applied by the real stack and independently proven by lib/db/rls.integration
-// (which applies every file to its own isolated PGlite). Once the app-layer
-// cutover lands and PGlite is retired, this ceiling and the runner go away.
-const LEGACY_MIGRATION_CEILING = 33
-
-function migrationSeq(file: string): number {
-  const m = file.match(/^(\d+)/)
-  return m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER
-}
-
+// This runner applies ALL `supabase/migrations/*.sql` (001 through the latest),
+// including the Supabase Auth + RLS migrations (034+). Apply to a Postgres via
+// `npm run migrate` (see scripts/migrate.ts) — the app's native migration path,
+// which uses its own `_migrations` ledger and does NOT rely on the Supabase CLI's
+// migration history. PGlite applies the same files at init for local catalog dev.
 export function migrationFiles(): string[] {
   return readdirSync(migrationsDir())
     .filter(f => f.endsWith('.sql'))
-    .filter(f => migrationSeq(f) <= LEGACY_MIGRATION_CEILING)
     .sort()
 }
 
