@@ -6,21 +6,6 @@
 
 ---
 
-## Architecture update — Supabase Auth + database-enforced privacy (RLS)
-
-*Supersedes the identity strategy (§1), data model (§2), and privacy (§8) below. Those sections describe the original home-grown design (Phases 1–3, shipped in PR #47); the sections here are the current architecture on branch `claude/supabase-auth-rls`.*
-
-The identity and privacy layer was re-architected so the **database itself enforces per-user privacy**, rather than trusting the application layer:
-
-- **Identity is Supabase Auth (GoTrue), passwordless email OTP/magic-link.** `auth.users` is canonical; a `public.profiles` row (1:1, auto-created by a signup trigger) holds `display_name`, `home_city_id`, `onboarded_at`, `personalization_opt_out`. The home-grown `users`/`sessions`/`auth_tokens` tables and the signed `wid`/`sid` cookies are gone. Sign-in: `supabase.auth.signInWithOtp` → `/auth/callback` (PKCE) → session; the digest opt-in rides in user metadata and creates a confirmed subscription at callback.
-- **User-private data is accessed through the Supabase client under the user's JWT** (`@supabase/ssr` → PostgREST), so **RLS is the real gate.** Per-user policies (`auth.uid() = user_id`) protect `profiles`, `favorites`, `user_interests`, `interactions`, `user_affinity`, `user_vectors`, `rec_impressions`, `subscriptions`. Migrations `034`–`036`; the policies are proven against real Postgres in `lib/db/rls.integration.test.ts`.
-- **RLS scope is deliberate: only user-private + ML/personalization data.** Event metadata — the catalog (`events`, `venues`, `categories`, …) and the shared per-event aggregates (`event_engagement`, `model_versions`) — stays publicly readable with no per-user RLS. Anonymous visitors keep the full public catalog. Shared-aggregate writes go only through SECURITY DEFINER RPCs (`bump_impression`/`bump_engagement`), never a direct user write.
-- **Personalization is signed-in only.** The anonymous `anon_id` signal path was removed: a logged-out visitor gets a trending (non-personalized) list, and signals/survey/profile require an account. (This narrows the original "works for anonymous visitors from the first pageview" goal.)
-- **Two access paths:** the RLS-scoped Supabase client for user-private data (`lib/user/data.ts`); the `pg` service path (`lib/db`) for catalog + backend/ingest/cron. Backend uses elevated access that bypasses RLS by design.
-- **Local dev = the Supabase CLI stack** (`supabase start`; `supabase/config.toml`). Env: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`. PGlite remains only as a zero-config catalog dev/test harness.
-
----
-
 ## 0. Goals & non-goals
 
 **Goals**
@@ -40,7 +25,7 @@ The identity and privacy layer was re-architected so the **database itself enfor
 
 **Constraints inherited from the codebase**
 
-1. **Dual DB driver.** *(Superseded — see the Architecture update above.)* Originally everything had to run on both Supabase Postgres and embedded PGlite, which is why the first cut rolled its own auth. Auth is now Supabase Auth (the Supabase CLI local stack replaces PGlite for auth/RLS); PGlite remains only as a zero-config catalog dev/test harness. Migrations still stick to SQL features both drivers support (embeddings are `REAL[]`, not pgvector, since PGlite ships no `vector` extension).
+1. **Dual DB driver.** Everything must run on both Supabase Postgres (`lib/db/pg.ts`) and embedded PGlite (`lib/db/pglite.ts`). That rules out Supabase Auth as the identity layer for local dev, and means migrations stick to SQL features both drivers support. The repo already uses GIN FTS and `pg_trgm`; PGlite also ships the `vector` extension, so the pgvector embedding column works locally.
 2. **ISR pages.** `app/[city]/page.tsx` uses `revalidate = 900`. Personalized content must **not** render in the cached RSC payload — it is fetched client-side from an API route. This shapes the whole UI plan.
 3. **No ORM.** All reads/writes go through typed functions in `lib/db/index.ts`; new features follow that pattern.
 4. **Vercel cron limits.** Crons may be restricted to daily firing (Hobby plan). Anything needing freshness faster than daily is therefore **write-through** (updated inline on user actions), never cron-dependent.
