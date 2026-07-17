@@ -93,6 +93,15 @@ export const ENGAGEMENT_PRIOR_STRENGTH = 20
 // Fallback city-average engagement rate before enough data exists to compute one.
 export const DEFAULT_CITY_ENGAGEMENT_RATE = 0.1
 
+// --- Serving ----------------------------------------------------------------
+// Candidate window: only events starting within the next N days are eligible.
+export const RECS_WINDOW_DAYS = 14
+// Hard cap on candidates scored per request (keeps the in-TS scoring bounded).
+export const RECS_CANDIDATE_CAP = 300
+// Default rail/feed size and how many of those slots go to exploration.
+export const RECS_DEFAULT_LIMIT = 20
+export const RECS_EXPLORE_SLOTS = 2
+
 // --- The seeded model -------------------------------------------------------
 // v1 prior weights for the logistic-regression scorer. MUST match the seed in
 // supabase/migrations/031_ml.sql (a test asserts the active DB row equals this).

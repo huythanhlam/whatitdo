@@ -10,6 +10,7 @@ import { MapView } from '@/components/MapView'
 import { ViewToggle } from '@/components/ViewToggle'
 import { HeroCarousel } from '@/components/HeroCarousel'
 import { CategoryCarousel } from '@/components/CategoryCarousel'
+import { ForYouRail } from '@/components/ForYouRail'
 import { BackToTopButton } from '@/components/BackToTopButton'
 import { HeaderHeightSync } from '@/components/HeaderHeightSync'
 import { listEvents, countEvents, listEventsForMap, getDistinctSources, type City } from '@/lib/db'
@@ -18,6 +19,7 @@ import { resolveDateRange } from '@/lib/dateRanges'
 import { gridRangeIso, currentCentralMonth } from '@/lib/calendar'
 import { DateFilter } from '@/components/DateFilter'
 import { SEO_PAGES } from '@/lib/seoPages'
+import { isRecsCity } from '@/lib/recs/config'
 import type { EnrichedEvent } from '@/lib/types'
 
 // Content changes about once a day (the ingest cron), so serve cached HTML and
@@ -268,6 +270,10 @@ export default async function CityHomePage({
           </Suspense>
         </div>
       </section>
+
+      {/* Personalized rail (Austin-only at launch). A client island fetched
+          per-visitor, so the ISR-cached page HTML stays impersonal. */}
+      {isRecsCity(citySlug) && <ForYouRail city={city.slug} basePath={base} />}
 
       {/* Category carousel — a bold, single-click way into a filtered result
           set; SidebarFilters below still handles multi-select refinement. */}

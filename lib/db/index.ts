@@ -10,6 +10,10 @@ import {
   EMA_ALPHA,
   ENGAGEMENT_PRIOR_STRENGTH,
   DEFAULT_CITY_ENGAGEMENT_RATE,
+  RECS_WINDOW_DAYS,
+  RECS_CANDIDATE_CAP,
+  RECS_DEFAULT_LIMIT,
+  RECS_EXPLORE_SLOTS,
   type InteractionType,
   type ModelWeights,
 } from '@/lib/recs/config'
@@ -19,6 +23,13 @@ import {
   bayesianEngagementScore,
   type EventSignalContext,
 } from '@/lib/recs/affinity'
+import { blendVector } from '@/lib/recs/embed'
+import {
+  rankCandidates,
+  type Candidate as RecCandidate,
+  type ActorTaste,
+  type FeatureVector,
+} from '@/lib/recs/score'
 
 // Returns true when no direct Postgres connection is configured — the app then
 // runs against an embedded local Postgres (PGlite) so it works with zero
@@ -877,7 +888,7 @@ export async function getActiveModel(): Promise<{ id: number; weights: ModelWeig
 // city (used to stamp the interaction when the caller didn't supply one).
 async function getEventSignalContext(
   eventId: string
-): Promise<(EventSignalContext & { cityId: number }) | null> {
+): Promise<(EventSignalContext & { cityId: number; embedding: number[] | null }) | null> {
   const db = await getDb()
   const rows = await db.query<{
     city_id: number
@@ -885,8 +896,9 @@ async function getEventSignalContext(
     is_free: boolean
     start_time: string
     category_slugs: string[]
+    embedding: number[] | null
   }>(
-    `SELECT e.city_id, e.venue_norm, e.is_free, e.start_time,
+    `SELECT e.city_id, e.venue_norm, e.is_free, e.start_time, e.embedding,
        COALESCE((
          SELECT array_agg(c.slug)
          FROM event_categories ec JOIN categories c ON c.id = ec.category_id
@@ -903,7 +915,31 @@ async function getEventSignalContext(
     isFree: !!r.is_free,
     startTime: r.start_time,
     categorySlugs: r.category_slugs ?? [],
+    embedding: r.embedding ?? null,
   }
+}
+
+// Blend an engaged event's embedding into the actor's taste vector (a running
+// mean). No-op when the event isn't embedded yet. Feeds the semantic feature so
+// "more like what I've liked" strengthens with each positive signal.
+async function blendUserVector(db: Db, actor: Actor, embedding: number[]): Promise<void> {
+  const col = actor.userId ? 'user_id' : 'anon_id'
+  const id = actor.userId ?? actor.anonId
+  if (!id) return
+  const prev = (
+    await db.query<{ vec: number[]; n: number }>(
+      `SELECT vec, n FROM user_vectors WHERE ${col} = $1`,
+      [id]
+    )
+  )[0]
+  const next = blendVector(prev ?? null, embedding)
+  await db.query(
+    `INSERT INTO user_vectors (${col}, vec, n)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (${col}) WHERE ${col} IS NOT NULL
+     DO UPDATE SET vec = $2, n = $3, updated_at = NOW()`,
+    [id, next.vec, next.n]
+  )
 }
 
 // Blend one affinity observation into an actor's stored EMA. The conflict target
@@ -1003,6 +1039,11 @@ export async function recordInteraction(params: {
         [params.serveId, params.eventId]
       )
     }
+
+    // Semantic taste: fold the engaged event's embedding into the actor's vector.
+    if (ctx?.embedding && ctx.embedding.length > 0) {
+      await blendUserVector(db, actor, ctx.embedding)
+    }
   }
 }
 
@@ -1035,4 +1076,259 @@ export async function listActorAffinity(
     )
   }
   return []
+}
+
+// ---------------------------------------------------------------------------
+// Recommendations — serving (the ranking model at request time)
+// ---------------------------------------------------------------------------
+
+// Build the "kind:value" affinity map + taste vector for one actor.
+async function getActorTaste(db: Db, actor: Actor): Promise<ActorTaste> {
+  const col = actor.userId ? 'user_id' : 'anon_id'
+  const id = actor.userId ?? actor.anonId
+  if (!id) return { affinity: new Map(), vector: null }
+  const [affRows, vecRows] = await Promise.all([
+    db.query<{ kind: string; value: string; score: number }>(
+      `SELECT kind, value, score FROM user_affinity WHERE ${col} = $1`,
+      [id]
+    ),
+    db.query<{ vec: number[] }>(`SELECT vec FROM user_vectors WHERE ${col} = $1`, [id]),
+  ])
+  const affinity = new Map<string, number>()
+  for (const r of affRows) affinity.set(`${r.kind}:${r.value}`, r.score)
+  return { affinity, vector: vecRows[0]?.vec ?? null }
+}
+
+// Events this actor has hidden ("not interested") and their per-event view
+// counts — the exclusion set and the seen_count feature, in two small queries.
+async function getActorEventState(
+  db: Db,
+  actor: Actor
+): Promise<{ hidden: Set<string>; seen: Map<string, number> }> {
+  const col = actor.userId ? 'user_id' : 'anon_id'
+  const id = actor.userId ?? actor.anonId
+  if (!id) return { hidden: new Set(), seen: new Map() }
+  const [hiddenRows, seenRows] = await Promise.all([
+    db.query<{ event_id: string }>(
+      `SELECT DISTINCT event_id FROM interactions
+       WHERE ${col} = $1 AND type = 'hide' AND event_id IS NOT NULL`,
+      [id]
+    ),
+    db.query<{ event_id: string; n: number }>(
+      `SELECT event_id, COUNT(*)::int AS n FROM interactions
+       WHERE ${col} = $1 AND type = 'view' AND event_id IS NOT NULL
+       GROUP BY event_id`,
+      [id]
+    ),
+  ])
+  return {
+    hidden: new Set(hiddenRows.map(r => r.event_id)),
+    seen: new Map(seenRows.map(r => [r.event_id, r.n])),
+  }
+}
+
+export type RecImpressionItem = {
+  eventId: string
+  position: number
+  features: FeatureVector
+  explored: boolean
+}
+
+// Rank upcoming events for an actor with the active model. Returns the ordered
+// enriched events (for rendering) alongside the impressions to log (for
+// training) and the model version that ranked them. Pure ranking lives in
+// lib/recs/score; this function only assembles inputs and maps outputs.
+export async function listRecommendedEvents(
+  cityId: number,
+  actor: Actor,
+  opts: { limit?: number } = {}
+): Promise<{
+  events: EnrichedEvent[]
+  impressions: RecImpressionItem[]
+  modelVersion: number
+  personalized: boolean
+}> {
+  const db = await getDb()
+  const limit = opts.limit ?? RECS_DEFAULT_LIMIT
+  const nowIso = new Date().toISOString()
+  const nowMs = Date.now()
+  const toIso = new Date(nowMs + RECS_WINDOW_DAYS * 86_400_000).toISOString()
+
+  const model = await getActiveModel()
+  if (!model) return { events: [], impressions: [], modelVersion: 0, personalized: false }
+
+  const [rows, taste, state] = await Promise.all([
+    db.query<Record<string, unknown>>(
+      `SELECT e.*, ${CATEGORIES_JSON}, ${FEATURED_JSON},
+         ee.score AS engagement_score, v.neighborhood
+       FROM events e
+       LEFT JOIN event_engagement ee ON ee.event_id = e.id
+       LEFT JOIN venues v ON v.city_id = e.city_id AND v.venue_norm = e.venue_norm AND v.status = 'ok'
+       WHERE e.city_id = $1 AND e.status = 'approved'
+         AND e.start_time >= $2 AND e.start_time <= $3
+       ORDER BY e.start_time ASC
+       LIMIT $4`,
+      [cityId, nowIso, toIso, RECS_CANDIDATE_CAP]
+    ),
+    getActorTaste(db, actor),
+    getActorEventState(db, actor),
+  ])
+
+  // Split each row into a scoring Candidate and a render row (embedding stripped
+  // so a 768-float array never ships to the client).
+  const renderById = new Map<string, Record<string, unknown>>()
+  const candidates: RecCandidate[] = []
+  for (const row of rows) {
+    const id = row.id as string
+    if (state.hidden.has(id)) continue // excluded outright
+    const embedding = (row.embedding as number[] | null) ?? null
+    delete row.embedding
+    renderById.set(id, row)
+    candidates.push({
+      id,
+      categorySlugs: ((row.categories as { slug: string }[] | null) ?? []).map(c => c.slug),
+      venueNorm: (row.venue_norm as string | null) ?? null,
+      neighborhood: (row.neighborhood as string | null) ?? null,
+      isFree: !!row.is_free,
+      startTime: row.start_time as string,
+      engagementScore: (row.engagement_score as number | null) ?? null,
+      embedding,
+      seenCount: state.seen.get(id) ?? 0,
+    })
+  }
+
+  const ranked = rankCandidates(candidates, taste, {
+    weights: model.weights,
+    nowMs,
+    limit,
+    exploreSlots: RECS_EXPLORE_SLOTS,
+  })
+
+  const events = ranked.map(r => enrichRow(renderById.get(r.id)!, nowIso))
+  const impressions = ranked.map(r => ({
+    eventId: r.id,
+    position: r.position,
+    features: r.features,
+    explored: r.explored,
+  }))
+  // Personalized when the actor has any learned taste; otherwise the same model
+  // ran on zero features (a trending-shaped list) and the UI labels it as such.
+  const personalized = taste.affinity.size > 0 || taste.vector !== null
+  return { events, impressions, modelVersion: model.id, personalized }
+}
+
+// Persist a served page of recommendations: one rec_impressions row per item
+// (the training data) and a write-through +1 to each event's impression count
+// (so the engagement prior reflects exposure in real time). Best-effort — a
+// logging failure must not fail the response the user is waiting on.
+export async function logImpressions(params: {
+  serveId: string
+  cityId: number
+  actor: Actor
+  surface: string
+  modelVersion: number
+  items: RecImpressionItem[]
+}): Promise<void> {
+  if (params.items.length === 0) return
+  const db = await getDb()
+  for (const item of params.items) {
+    await db.query(
+      `INSERT INTO rec_impressions
+         (serve_id, user_id, anon_id, city_id, event_id, surface, position, features, model_version, explored)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10)`,
+      [
+        params.serveId,
+        params.actor.userId,
+        params.actor.anonId,
+        params.cityId,
+        item.eventId,
+        params.surface,
+        item.position,
+        JSON.stringify(item.features),
+        params.modelVersion,
+        item.explored,
+      ]
+    )
+    // Exposure bumps the Bayesian engagement prior write-through: a shown-but-
+    // ignored event drifts down, which raw popularity counts can't express.
+    await db.query(
+      `INSERT INTO event_engagement (event_id, impressions, engagements, score)
+       VALUES ($1, 1, 0, $2::real)
+       ON CONFLICT (event_id) DO UPDATE SET
+         impressions = event_engagement.impressions + 1,
+         score = (event_engagement.engagements + $3::real * $4::real)
+                 / (event_engagement.impressions + 1 + $3::real),
+         updated_at = NOW()`,
+      [
+        item.eventId,
+        bayesianEngagementScore(0, 1),
+        ENGAGEMENT_PRIOR_STRENGTH,
+        DEFAULT_CITY_ENGAGEMENT_RATE,
+      ]
+    )
+  }
+}
+
+// --- Favorites (explicit saves) --------------------------------------------
+
+export async function addFavorite(actor: Actor, eventId: string): Promise<void> {
+  const db = await getDb()
+  if (actor.userId) {
+    await db.query(
+      `INSERT INTO favorites (user_id, event_id) VALUES ($1, $2)
+       ON CONFLICT (user_id, event_id) WHERE user_id IS NOT NULL DO NOTHING`,
+      [actor.userId, eventId]
+    )
+  } else if (actor.anonId) {
+    await db.query(
+      `INSERT INTO favorites (anon_id, event_id) VALUES ($1, $2)
+       ON CONFLICT (anon_id, event_id) WHERE anon_id IS NOT NULL DO NOTHING`,
+      [actor.anonId, eventId]
+    )
+  }
+}
+
+export async function removeFavorite(actor: Actor, eventId: string): Promise<void> {
+  const db = await getDb()
+  const col = actor.userId ? 'user_id' : 'anon_id'
+  const id = actor.userId ?? actor.anonId
+  if (!id) return
+  await db.query(`DELETE FROM favorites WHERE ${col} = $1 AND event_id = $2`, [id, eventId])
+}
+
+// The actor's saved event ids — for the profile list and to render the heart
+// filled where already saved.
+export async function listFavoriteIds(actor: Actor): Promise<string[]> {
+  const db = await getDb()
+  const col = actor.userId ? 'user_id' : 'anon_id'
+  const id = actor.userId ?? actor.anonId
+  if (!id) return []
+  const rows = await db.query<{ event_id: string }>(
+    `SELECT event_id FROM favorites WHERE ${col} = $1 ORDER BY created_at DESC`,
+    [id]
+  )
+  return rows.map(r => r.event_id)
+}
+
+// --- Embedding backfill ----------------------------------------------------
+
+// Approved events that haven't been embedded yet (newest first — the soonest
+// upcoming events matter most to the rail). Used by the backfill script and,
+// later, a cron.
+export async function getEventsMissingEmbedding(
+  limit: number
+): Promise<{ id: string; title: string; description: string | null }[]> {
+  const db = await getDb()
+  return db.query(
+    `SELECT id, title, description FROM events
+     WHERE embedding IS NULL AND status = 'approved'
+     ORDER BY start_time DESC
+     LIMIT $1`,
+    [limit]
+  )
+}
+
+export async function setEventEmbedding(id: string, vec: number[]): Promise<void> {
+  const db = await getDb()
+  await db.query(`UPDATE events SET embedding = $2 WHERE id = $1`, [id, vec])
 }
