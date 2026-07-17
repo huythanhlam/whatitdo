@@ -8,7 +8,7 @@ import {
   listFavoriteIds,
 } from '@/lib/db'
 import { isRecsCity } from '@/lib/recs/config'
-import { resolveAnon, attachAnon } from '@/lib/auth/actor'
+import { resolveActor, attachAnon } from '@/lib/auth/actor'
 
 // Explicit actions from the cards: save (heart), interested (star), and their
 // undos, plus hide ("not interested"). Each is recorded as an interaction — so
@@ -39,10 +39,10 @@ export async function GET(req: NextRequest) {
   if (!isRecsCity(citySlug)) {
     return NextResponse.json({ favorites: [] }, { headers: { 'Cache-Control': 'private, no-store' } })
   }
-  const { anonId, isNew } = resolveAnon(req)
-  const favorites = await listFavoriteIds({ userId: null, anonId })
+  const { actor, anonIsNew } = await resolveActor(req)
+  const favorites = await listFavoriteIds(actor)
   const res = NextResponse.json({ favorites }, { headers: { 'Cache-Control': 'private, no-store' } })
-  attachAnon(res, anonId, isNew)
+  if (actor.anonId) attachAnon(res, actor.anonId, anonIsNew)
   return res
 }
 
@@ -70,8 +70,7 @@ export async function POST(req: NextRequest) {
   const city = await getCityBySlug(citySlug)
   const serveId = typeof body.serveId === 'string' ? body.serveId : null
 
-  const { anonId, isNew } = resolveAnon(req)
-  const actor = { userId: null, anonId }
+  const { actor, anonIsNew } = await resolveActor(req)
 
   await recordInteraction({ actor, type: action as Action, eventId, cityId: city?.id ?? null, serveId })
   // Favorites keep a durable saved-list row on top of the interaction signal.
@@ -79,6 +78,6 @@ export async function POST(req: NextRequest) {
   else if (action === 'unfavorite') await removeFavorite(actor, eventId)
 
   const res = NextResponse.json({ ok: true }, { headers: { 'Cache-Control': 'private, no-store' } })
-  attachAnon(res, anonId, isNew)
+  if (actor.anonId) attachAnon(res, actor.anonId, anonIsNew)
   return res
 }

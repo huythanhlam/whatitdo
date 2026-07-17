@@ -11,6 +11,7 @@ import { ViewToggle } from '@/components/ViewToggle'
 import { HeroCarousel } from '@/components/HeroCarousel'
 import { CategoryCarousel } from '@/components/CategoryCarousel'
 import { ForYouRail } from '@/components/ForYouRail'
+import { AuthNav } from '@/components/AuthNav'
 import { BackToTopButton } from '@/components/BackToTopButton'
 import { HeaderHeightSync } from '@/components/HeaderHeightSync'
 import { listEvents, countEvents, listEventsForMap, getDistinctSources, type City } from '@/lib/db'
@@ -208,6 +209,9 @@ export default async function CityHomePage({
           >
             Get Updates
           </Link>
+          {/* Auth-aware, Austin-only at launch. Client island so the ISR-cached
+              header HTML stays impersonal (see components/AuthNav.tsx). */}
+          {isRecsCity(citySlug) && <AuthNav />}
           {/* Full-width on mobile so it wraps to its own row instead of
               squeezing down to an unusable sliver next to the logo/CTA. */}
           <div className="order-5 sm:order-3 w-full sm:w-auto sm:flex-1 sm:max-w-xl">

@@ -2,13 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkRateLimit, clientIp } from '@/lib/rateLimit'
 import { getCityBySlug, recordInteraction } from '@/lib/db'
 import { isInteractionType, isRecsCity } from '@/lib/recs/config'
-import {
-  WID_COOKIE,
-  parseWid,
-  newAnonId,
-  signWid,
-  widCookieOptions,
-} from '@/lib/auth/session'
+import { resolveActor, attachAnon } from '@/lib/auth/actor'
 
 // Implicit-signal beacon. The client posts here (via navigator.sendBeacon) on
 // views, clickouts, shares, calendar adds, etc. It is deliberately cheap and
@@ -59,15 +53,15 @@ export async function POST(req: NextRequest) {
   const query = typeof body.query === 'string' ? body.query.slice(0, 200) : null
   const serveId = typeof body.serveId === 'string' ? body.serveId : null
 
-  // Resolve the anonymous device id from the signed cookie, minting a new one
-  // if absent/forged so the very first beacon still has an identity to attach to.
-  const existing = parseWid(req.cookies.get(WID_COOKIE)?.value)
-  const anonId = existing ?? newAnonId()
+  // Resolve the actor: a signed-in user (via the `sid` session) when present,
+  // otherwise the anonymous device — minting a fresh `wid` if absent/forged so the
+  // very first beacon still has an identity to attach to.
+  const { actor, anonIsNew } = await resolveActor(req)
 
   try {
     const city = await getCityBySlug(citySlug)
     await recordInteraction({
-      actor: { userId: null, anonId },
+      actor,
       type,
       eventId,
       cityId: city?.id ?? null,
@@ -79,6 +73,6 @@ export async function POST(req: NextRequest) {
   }
 
   const res = noContent()
-  if (!existing) res.cookies.set(WID_COOKIE, signWid(anonId), widCookieOptions())
+  if (actor.anonId) attachAnon(res, actor.anonId, anonIsNew)
   return res
 }

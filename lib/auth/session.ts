@@ -1,4 +1,4 @@
-import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
+import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 
 // Anonymous device identity — the `wid` cookie.
 //
@@ -64,8 +64,57 @@ export function widCookieOptions() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Account session — the `sid` cookie (magic-link auth).
+//
+// Unlike `wid`, the session cookie carries no HMAC: its value is the opaque
+// `sessions.id` primary key — a 256-bit random string looked up server-side, so
+// forging it means guessing a row that doesn't exist. The magic-link token is the
+// same shape (a random `auth_tokens.token`), consumed once at verify.
+// ---------------------------------------------------------------------------
+
+export const SID_COOKIE = 'sid'
+// Rolling session lifetime. Refreshed lazily on use (see getSessionUser) so an
+// active account stays signed in without a DB write on every request.
+export const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 90 // 90 days
+export const SID_MAX_AGE_SECONDS = 60 * 60 * 24 * 90
+// Only refresh a session's expiry once it's more than a day into its window, so
+// an active account isn't a DB write on every request (a rolling, not per-hit,
+// extension). Equivalently: refresh when less than TTL-1day of life remains.
+export const SESSION_REFRESH_THRESHOLD_MS = SESSION_TTL_MS - 1000 * 60 * 60 * 24
+// Magic-link tokens are short-lived and single-use.
+export const AUTH_TOKEN_TTL_MS = 1000 * 60 * 15 // 15 minutes
+
+// A 256-bit random id, hex-encoded. Used for both session ids and magic-link
+// tokens — both are opaque, unguessable database keys the app supplies itself.
+export function newSessionId(): string {
+  return randomBytes(32).toString('hex')
+}
+
+export function newAuthToken(): string {
+  return randomBytes(32).toString('hex')
+}
+
+// Cookie attributes for the session cookie. Same posture as `wid` (httpOnly,
+// lax, secure in prod) but a 90-day max-age matching the rolling session.
+export function sidCookieOptions() {
+  return {
+    httpOnly: true,
+    sameSite: 'lax' as const,
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: SID_MAX_AGE_SECONDS,
+  }
+}
+
+// Attributes to clear the session cookie on logout (maxAge 0 expires it).
+export function clearSidCookieOptions() {
+  return { ...sidCookieOptions(), maxAge: 0 }
+}
+
 // Who a request is: an authenticated user, an anonymous device, or both during
-// the merge window. Phase 1 only ever populates anonId (accounts ship later).
+// the merge window. Signed-out visitors only ever have anonId; signing in adds
+// userId (and the login handler merges the anon history into the user).
 export type Actor = { userId: string | null; anonId: string | null }
 
 export function hasActor(a: Actor): boolean {

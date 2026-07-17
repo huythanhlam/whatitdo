@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { checkRateLimit, clientIp } from '@/lib/rateLimit'
 import { getCityBySlug, listRecommendedEvents, logImpressions } from '@/lib/db'
 import { isRecsCity, RECS_DEFAULT_LIMIT } from '@/lib/recs/config'
-import { resolveAnon, attachAnon } from '@/lib/auth/actor'
+import { resolveActor, attachAnon } from '@/lib/auth/actor'
 
 // The ranking model at request time. Returns a personalized, diversity-ranked
 // page of upcoming events for the actor, plus a serve_id the client echoes back
@@ -42,8 +42,7 @@ export async function GET(req: NextRequest) {
   const surfaceParam = req.nextUrl.searchParams.get('surface') ?? 'rail'
   const surface = SURFACES.has(surfaceParam) ? surfaceParam : 'rail'
 
-  const { anonId, isNew } = resolveAnon(req)
-  const actor = { userId: null, anonId }
+  const { actor, anonIsNew } = await resolveActor(req)
 
   const { events, impressions, modelVersion, personalized } = await listRecommendedEvents(city.id, actor, { limit })
 
@@ -59,6 +58,6 @@ export async function GET(req: NextRequest) {
     { events, serveId, personalized },
     { headers: { 'Cache-Control': 'private, no-store' } }
   )
-  attachAnon(res, anonId, isNew)
+  if (actor.anonId) attachAnon(res, actor.anonId, anonIsNew)
   return res
 }

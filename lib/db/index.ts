@@ -3,7 +3,7 @@ import { getPgDb } from './pg'
 import { getPgliteDb } from './pglite'
 import type { RawEvent, SourceRow } from '@/lib/sources/types'
 import type { ExistingEvent, Candidate, FieldPatch } from '@/lib/dedup'
-import type { Actor } from '@/lib/auth/session'
+import { newSessionId, SESSION_TTL_MS, SESSION_REFRESH_THRESHOLD_MS, type Actor } from '@/lib/auth/session'
 import {
   SIGNAL_MAGNITUDE,
   POSITIVE_ENGAGEMENT_TYPES,
@@ -277,6 +277,21 @@ export async function getEvent(id: string): Promise<EnrichedEvent | null> {
   )
   if (rows.length === 0) return null
   return enrichRow(rows[0], nowIso)
+}
+
+// Enriched events for a set of ids, in the given order — for the account page's
+// saved / interested / hidden lists. Past events are included (unlike the rail),
+// since the profile shows history; the caller orders/greys them.
+export async function getEventsByIds(ids: string[]): Promise<EnrichedEvent[]> {
+  if (ids.length === 0) return []
+  const db = await getDb()
+  const nowIso = new Date().toISOString()
+  const rows = await db.query<Record<string, unknown>>(
+    `SELECT e.*, ${CATEGORIES_JSON}, ${SOURCES_JSON} FROM events e WHERE e.id = ANY($1)`,
+    [ids]
+  )
+  const byId = new Map(rows.map(r => [r.id as string, enrichRow(r, nowIso)]))
+  return ids.map(id => byId.get(id)).filter((e): e is EnrichedEvent => !!e)
 }
 
 // ---------------------------------------------------------------------------
@@ -1331,4 +1346,363 @@ export async function getEventsMissingEmbedding(
 export async function setEventEmbedding(id: string, vec: number[]): Promise<void> {
   const db = await getDb()
   await db.query(`UPDATE events SET embedding = $2 WHERE id = $1`, [id, vec])
+}
+
+// ---------------------------------------------------------------------------
+// Accounts, sessions & profile (magic-link auth)
+//
+// The write/read helpers behind /api/auth/*, /api/profile, and /api/onboarding.
+// One person = one `users` row (created on first magic-link verify); a `sessions`
+// row backs the httpOnly `sid` cookie; `auth_tokens` are single-use magic links.
+// ---------------------------------------------------------------------------
+
+export type User = {
+  id: string
+  email: string
+  display_name: string | null
+  home_city_id: number | null
+  onboarded_at: string | null
+  personalization_opt_out: boolean
+}
+
+const USER_COLS = `id, email, display_name, home_city_id, onboarded_at, personalization_opt_out`
+
+export async function getUserById(id: string): Promise<User | null> {
+  const db = await getDb()
+  const rows = await db.query<User>(`SELECT ${USER_COLS} FROM users WHERE id = $1`, [id])
+  return rows[0] ?? null
+}
+
+export async function getUserByEmail(email: string): Promise<User | null> {
+  const db = await getDb()
+  const rows = await db.query<User>(`SELECT ${USER_COLS} FROM users WHERE email = $1`, [email])
+  return rows[0] ?? null
+}
+
+// Get-or-create by email — the verify handler calls this once the magic link is
+// consumed. Idempotent across logins thanks to the email UNIQUE constraint; the
+// no-op DO UPDATE lets RETURNING hand back the existing row on conflict. Callers
+// pass a normalized (trimmed, lowercased) email.
+export async function getOrCreateUser(email: string): Promise<User> {
+  const db = await getDb()
+  const rows = await db.query<User>(
+    `INSERT INTO users (email) VALUES ($1)
+     ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
+     RETURNING ${USER_COLS}`,
+    [email]
+  )
+  return rows[0]
+}
+
+export async function updateUserProfile(
+  id: string,
+  patch: { displayName?: string | null; homeCityId?: number | null; personalizationOptOut?: boolean }
+): Promise<void> {
+  const db = await getDb()
+  const sets: string[] = []
+  const vals: unknown[] = [id]
+  if (patch.displayName !== undefined) { vals.push(patch.displayName); sets.push(`display_name = $${vals.length}`) }
+  if (patch.homeCityId !== undefined) { vals.push(patch.homeCityId); sets.push(`home_city_id = $${vals.length}`) }
+  if (patch.personalizationOptOut !== undefined) { vals.push(patch.personalizationOptOut); sets.push(`personalization_opt_out = $${vals.length}`) }
+  if (sets.length === 0) return
+  await db.query(`UPDATE users SET ${sets.join(', ')} WHERE id = $1`, vals)
+}
+
+// Stamp the survey as done. Set once and never overwritten, so completing then
+// later revisiting the survey (or skipping it) never re-triggers the onboarding
+// redirect — "never nag twice."
+export async function markOnboarded(id: string): Promise<void> {
+  const db = await getDb()
+  await db.query(`UPDATE users SET onboarded_at = NOW() WHERE id = $1 AND onboarded_at IS NULL`, [id])
+}
+
+// --- Magic-link tokens -----------------------------------------------------
+
+export async function createAuthToken(params: {
+  token: string
+  email: string
+  wantsDigest: boolean
+  expiresAt: Date
+}): Promise<void> {
+  const db = await getDb()
+  await db.query(
+    `INSERT INTO auth_tokens (token, email, wants_digest, expires_at) VALUES ($1, $2, $3, $4)`,
+    [params.token, params.email, params.wantsDigest, params.expiresAt.toISOString()]
+  )
+}
+
+// Consume a magic-link token atomically: the UPDATE ... WHERE used_at IS NULL AND
+// not-expired RETURNING both checks validity and claims the token in one
+// statement, so two concurrent verifies can't both succeed. Returns null for an
+// unknown, expired, or already-used token.
+export async function consumeAuthToken(token: string): Promise<{ email: string; wantsDigest: boolean } | null> {
+  const db = await getDb()
+  const rows = await db.query<{ email: string; wants_digest: boolean }>(
+    `UPDATE auth_tokens SET used_at = NOW()
+     WHERE token = $1 AND used_at IS NULL AND expires_at > NOW()
+     RETURNING email, wants_digest`,
+    [token]
+  )
+  const r = rows[0]
+  return r ? { email: r.email, wantsDigest: r.wants_digest } : null
+}
+
+// --- Sessions --------------------------------------------------------------
+
+export async function createSession(userId: string): Promise<string> {
+  const db = await getDb()
+  const id = newSessionId()
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString()
+  await db.query(`INSERT INTO sessions (id, user_id, expires_at) VALUES ($1, $2, $3)`, [id, userId, expiresAt])
+  return id
+}
+
+// Resolve the `sid` cookie to a user id, honoring expiry. Rolling refresh: extend
+// the window only once the session is more than a day old, so an active account
+// stays signed in without a write per request. Returns null for a missing or
+// expired session (a later prune removes the dead row).
+export async function getSessionUser(sid: string): Promise<string | null> {
+  const db = await getDb()
+  const rows = await db.query<{ user_id: string; expires_at: string }>(
+    `SELECT user_id, expires_at FROM sessions WHERE id = $1`,
+    [sid]
+  )
+  const s = rows[0]
+  if (!s) return null
+  const exp = new Date(s.expires_at).getTime()
+  const now = Date.now()
+  if (exp <= now) return null
+  if (exp - now < SESSION_REFRESH_THRESHOLD_MS) {
+    const next = new Date(now + SESSION_TTL_MS).toISOString()
+    await db.query(`UPDATE sessions SET expires_at = $2 WHERE id = $1`, [sid, next])
+  }
+  return s.user_id
+}
+
+export async function deleteSession(sid: string): Promise<void> {
+  const db = await getDb()
+  await db.query(`DELETE FROM sessions WHERE id = $1`, [sid])
+}
+
+// --- Anon → user merge (login) ---------------------------------------------
+
+const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
+
+// Re-key a device's anonymous history onto a user at first login. For each table
+// with a per-identity unique index, move only the rows whose key the user doesn't
+// already hold, then drop the leftover (colliding) anon rows; append-only tables
+// (interactions, rec_impressions) move wholesale. Nulling anon_id on moved rows
+// makes a repeat login a no-op — the merge is idempotent.
+//
+// Runs as one transaction. exec() takes no parameters, so the two ids are
+// interpolated — safe here precisely because both are validated as UUIDs (minted
+// by us: a random session/anon UUID and a DB-generated user id), never free text.
+export async function mergeAnonIntoUser(userId: string, anonId: string): Promise<void> {
+  if (!UUID_RE.test(userId) || !UUID_RE.test(anonId)) return
+  const db = await getDb()
+  const u = `'${userId}'::uuid`
+  const a = `'${anonId}'::uuid`
+  // Move rows keyed on `keyCols` that don't collide with an existing user row,
+  // then delete the anon leftovers (the collisions — the user's row wins).
+  const moveKeyed = (table: string, keyCols: string[]) => {
+    const match = keyCols.map(c => `t2.${c} = t.${c}`).join(' AND ')
+    return `UPDATE ${table} t SET user_id = ${u}, anon_id = NULL
+      WHERE t.anon_id = ${a}
+        AND NOT EXISTS (SELECT 1 FROM ${table} t2 WHERE t2.user_id = ${u} AND ${match});
+    DELETE FROM ${table} WHERE anon_id = ${a};`
+  }
+  const script = `BEGIN;
+    ${moveKeyed('favorites', ['event_id'])}
+    ${moveKeyed('user_interests', ['kind', 'value'])}
+    ${moveKeyed('user_affinity', ['kind', 'value'])}
+    UPDATE user_vectors t SET user_id = ${u}, anon_id = NULL
+      WHERE t.anon_id = ${a}
+        AND NOT EXISTS (SELECT 1 FROM user_vectors t2 WHERE t2.user_id = ${u});
+    DELETE FROM user_vectors WHERE anon_id = ${a};
+    UPDATE interactions SET user_id = ${u}, anon_id = NULL WHERE anon_id = ${a};
+    UPDATE rec_impressions SET user_id = ${u}, anon_id = NULL WHERE anon_id = ${a};
+  COMMIT;`
+  await db.exec(script)
+}
+
+// Link any subscriptions for a now-verified email to the user, and confirm them:
+// signing in via the magic link proves the address, which satisfies the digest's
+// double opt-in for a subscription they'd started but not confirmed.
+export async function linkSubscriptionsToUser(userId: string, email: string): Promise<void> {
+  const db = await getDb()
+  await db.query(
+    `UPDATE subscriptions SET user_id = $1, confirmed = true WHERE email = $2`,
+    [userId, email]
+  )
+}
+
+// The user's digest subscription for a city (for the account page's digest
+// section), or null if they have none. Read by verified email, which the account
+// owns.
+export async function getDigestSubscription(
+  email: string,
+  cityId: number
+): Promise<{ frequency: string; confirmed: boolean; category_slugs: string[] } | null> {
+  const db = await getDb()
+  const rows = await db.query<{ frequency: string; confirmed: boolean; category_slugs: string[] }>(
+    `SELECT frequency, confirmed, category_slugs FROM subscriptions WHERE email = $1 AND city_id = $2`,
+    [email, cityId]
+  )
+  return rows[0] ?? null
+}
+
+// --- Explicit interests (survey + profile) ---------------------------------
+
+export type InterestRow = { kind: string; value: string; weight: number }
+
+// Replace this source's interests for the user wholesale, then upsert the new
+// set. A same-(kind,value) row owned by a different source is re-owned by this
+// one (a profile edit, source='profile', overrides an onboarding pick).
+export async function setUserInterests(userId: string, source: string, rows: InterestRow[]): Promise<void> {
+  const db = await getDb()
+  await db.query(`DELETE FROM user_interests WHERE user_id = $1 AND source = $2`, [userId, source])
+  for (const r of rows) {
+    await db.query(
+      `INSERT INTO user_interests (user_id, kind, value, weight, source)
+       VALUES ($1, $2, $3, $4::real, $5)
+       ON CONFLICT (user_id, kind, value) WHERE user_id IS NOT NULL
+       DO UPDATE SET weight = EXCLUDED.weight, source = EXCLUDED.source, updated_at = NOW()`,
+      [userId, r.kind, r.value, r.weight, source]
+    )
+  }
+}
+
+export async function listUserInterests(
+  userId: string
+): Promise<{ kind: string; value: string; weight: number; source: string }[]> {
+  const db = await getDb()
+  return db.query(
+    `SELECT kind, value, weight, source FROM user_interests WHERE user_id = $1 ORDER BY kind, value`,
+    [userId]
+  )
+}
+
+// Push explicitly-chosen preferences into the live affinity store so the scorer
+// acts on them immediately — the survey/profile writes user_interests for the
+// record, but the ranker reads user_affinity, so a pick has to land here too.
+// GREATEST keeps an already-stronger learned score from being pulled down by a
+// re-pick. Keys use the scorer's kinds: category / neighborhood / price / dow.
+export async function setExplicitAffinities(
+  userId: string,
+  keys: { kind: string; value: string }[],
+  score: number
+): Promise<void> {
+  if (keys.length === 0) return
+  const db = await getDb()
+  for (const k of keys) {
+    await db.query(
+      `INSERT INTO user_affinity (user_id, kind, value, score) VALUES ($1, $2, $3, $4::real)
+       ON CONFLICT (user_id, kind, value) WHERE user_id IS NOT NULL
+       DO UPDATE SET score = GREATEST(user_affinity.score, $4::real), computed_at = NOW()`,
+      [userId, k.kind, k.value, score]
+    )
+  }
+}
+
+// Cold-start the taste vector from chosen categories: the centroid of embedded
+// events in those categories, folded into the actor's vector as one observation.
+// No-op when nothing is embedded yet (dev without GEMINI_API_KEY / no backfill),
+// which is safe — the scorer treats an absent vector as no semantic signal.
+export async function seedUserVectorFromCategories(actor: Actor, categorySlugs: string[]): Promise<void> {
+  if (categorySlugs.length === 0) return
+  const db = await getDb()
+  const rows = await db.query<{ embedding: number[] }>(
+    `SELECT e.embedding FROM events e
+     WHERE e.embedding IS NOT NULL AND e.status = 'approved'
+       AND EXISTS (
+         SELECT 1 FROM event_categories ec JOIN categories c ON c.id = ec.category_id
+         WHERE ec.event_id = e.id AND c.slug = ANY($1)
+       )
+     ORDER BY e.start_time DESC
+     LIMIT 200`,
+    [categorySlugs]
+  )
+  if (rows.length === 0) return
+  const dim = rows[0].embedding.length
+  const centroid = new Array<number>(dim).fill(0)
+  for (const r of rows) for (let i = 0; i < dim; i++) centroid[i] += r.embedding[i]
+  for (let i = 0; i < dim; i++) centroid[i] /= rows.length
+  await blendUserVector(db, actor, centroid)
+}
+
+// --- Profile reads: interested + hidden ------------------------------------
+
+// Events the actor currently marks "interested": those whose most recent
+// interested/uninterested signal is 'interested' (the log is append-only, so
+// state is the latest row per event).
+export async function listInterestedEventIds(actor: Actor): Promise<string[]> {
+  const db = await getDb()
+  const col = actor.userId ? 'user_id' : 'anon_id'
+  const id = actor.userId ?? actor.anonId
+  if (!id) return []
+  const rows = await db.query<{ event_id: string }>(
+    `SELECT event_id FROM (
+       SELECT event_id, type,
+         ROW_NUMBER() OVER (PARTITION BY event_id ORDER BY created_at DESC, id DESC) AS rn
+       FROM interactions
+       WHERE ${col} = $1 AND type IN ('interested','uninterested') AND event_id IS NOT NULL
+     ) t WHERE rn = 1 AND type = 'interested'`,
+    [id]
+  )
+  return rows.map(r => r.event_id)
+}
+
+// Events the actor hid ("not interested"); the same set the recommender excludes.
+export async function listHiddenEventIds(actor: Actor): Promise<string[]> {
+  const db = await getDb()
+  const col = actor.userId ? 'user_id' : 'anon_id'
+  const id = actor.userId ?? actor.anonId
+  if (!id) return []
+  const rows = await db.query<{ event_id: string }>(
+    `SELECT DISTINCT event_id FROM interactions
+     WHERE ${col} = $1 AND type = 'hide' AND event_id IS NOT NULL`,
+    [id]
+  )
+  return rows.map(r => r.event_id)
+}
+
+// Undo a hide (the profile's "unhide"): drop the hide rows so the event is no
+// longer excluded from recommendations.
+export async function unhideEvent(actor: Actor, eventId: string): Promise<void> {
+  const db = await getDb()
+  const col = actor.userId ? 'user_id' : 'anon_id'
+  const id = actor.userId ?? actor.anonId
+  if (!id) return
+  await db.query(
+    `DELETE FROM interactions WHERE ${col} = $1 AND event_id = $2 AND type = 'hide'`,
+    [id, eventId]
+  )
+}
+
+// --- Privacy ---------------------------------------------------------------
+
+// "Clear my history": delete the actor's behavioral + derived rows. Explicit
+// prefs (favorites, user_interests) are intentionally kept — those are the saved
+// list and stated interests, not history. Matches RECOMMENDATIONS-SPEC §7.6.
+export async function clearActorHistory(actor: Actor): Promise<void> {
+  const db = await getDb()
+  const col = actor.userId ? 'user_id' : 'anon_id'
+  const id = actor.userId ?? actor.anonId
+  if (!id) return
+  for (const table of ['interactions', 'rec_impressions', 'user_affinity', 'user_vectors']) {
+    await db.query(`DELETE FROM ${table} WHERE ${col} = $1`, [id])
+  }
+}
+
+// Delete an account and everything tied to it. The FK cascades handle sessions,
+// favorites, user_interests, and interactions; the ML tables key on a bare
+// user_id (no FK) so they're deleted explicitly. subscriptions.user_id is SET
+// NULL by its FK — a digest opt-in is a separate email consent with its own
+// unsubscribe, not deleted by removing the account.
+export async function deleteUser(userId: string): Promise<void> {
+  const db = await getDb()
+  for (const table of ['user_affinity', 'user_vectors', 'rec_impressions']) {
+    await db.query(`DELETE FROM ${table} WHERE user_id = $1`, [userId])
+  }
+  await db.query(`DELETE FROM users WHERE id = $1`, [userId])
 }

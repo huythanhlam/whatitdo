@@ -93,6 +93,13 @@ export const ENGAGEMENT_PRIOR_STRENGTH = 20
 // Fallback city-average engagement rate before enough data exists to compute one.
 export const DEFAULT_CITY_ENGAGEMENT_RATE = 0.1
 
+// Score assigned to an affinity the user explicitly picks in the onboarding
+// survey or profile. A survey pick is a strong, direct statement, so it's set
+// straight to a high score rather than nudged up from 0 through the EMA (which
+// would only reach ~0.3 on a first signal). This is what makes an event feed
+// personalized the moment onboarding finishes, before any behavior accrues.
+export const EXPLICIT_AFFINITY_SCORE = 0.8
+
 // --- Serving ----------------------------------------------------------------
 // Candidate window: only events starting within the next N days are eligible.
 export const RECS_WINDOW_DAYS = 14
