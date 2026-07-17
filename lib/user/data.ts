@@ -236,6 +236,10 @@ export async function updateProfile(
 }
 
 export async function markOnboarded(sb: SB, userId: string): Promise<void> {
+  // The auth trigger normally creates the profile row on signup, but guard the
+  // edge case (e.g. accounts predating the trigger) so the stamp can't silently
+  // no-op: ensure the row exists, then stamp onboarded_at once (first write wins).
+  await sb.from('profiles').upsert({ id: userId }, { onConflict: 'id', ignoreDuplicates: true })
   await sb.from('profiles').update({ onboarded_at: new Date().toISOString() }).eq('id', userId).is('onboarded_at', null)
 }
 
