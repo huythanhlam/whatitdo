@@ -7,9 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "migrate": "tsx scripts/migrate.ts",
-    "backfill-geocode": "tsx scripts/backfill-geocode.ts",
-    "backfill-embeddings": "tsx scripts/backfill-embeddings.ts",
+    "migrate": "tsx --env-file-if-exists=.env.local scripts/migrate.ts",
+    "backfill-geocode": "tsx --env-file-if-exists=.env.local scripts/backfill-geocode.ts",
+    "backfill-embeddings": "tsx --env-file-if-exists=.env.local scripts/backfill-embeddings.ts",
     "test": "vitest run"
   },
   "dependencies": {
