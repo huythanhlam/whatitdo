@@ -5,12 +5,11 @@ import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
+import { createClient } from '@/lib/supabase/browser'
 
-// Magic-link sign-in: enter an email (optionally opt into the weekly digest) and
-// we POST /api/auth/request, which emails a one-time link. No password. The
-// response is neutral whether or not the address has an account, so this form
-// always just says "check your inbox." In local dev with no Resend key the API
-// returns the link inline (devLink) so sign-in is testable without email.
+// Passwordless sign-in via Supabase Auth (email magic link / OTP). The "email me
+// the digest" opt-in rides along in user metadata and is applied in the callback.
+// No password; the link returns to /auth/callback which opens the session.
 export function SignInForm() {
   const params = useSearchParams()
   const redirect = params.get('redirect') ?? ''
@@ -20,29 +19,22 @@ export function SignInForm() {
   const [wantsDigest, setWantsDigest] = useState(false)
   const [status, setStatus] = useState<'idle' | 'loading' | 'sent' | 'error'>('idle')
   const [message, setMessage] = useState('')
-  const [devLink, setDevLink] = useState<string | null>(null)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     setStatus('loading')
-    try {
-      const res = await fetch('/api/auth/request', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), wantsDigest, redirect }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setMessage(data.error ?? 'Something went wrong. Please try again.')
-        setStatus('error')
-        return
-      }
-      setDevLink(typeof data.devLink === 'string' ? data.devLink : null)
-      setStatus('sent')
-    } catch {
-      setMessage('Something went wrong. Please try again.')
+    const supabase = createClient()
+    const emailRedirectTo = `${window.location.origin}/auth/callback${redirect ? `?next=${encodeURIComponent(redirect)}` : ''}`
+    const { error } = await supabase.auth.signInWithOtp({
+      email: email.trim(),
+      options: { emailRedirectTo, data: { wants_digest: wantsDigest }, shouldCreateUser: true },
+    })
+    if (error) {
+      setMessage(error.message || 'Something went wrong. Please try again.')
       setStatus('error')
+      return
     }
+    setStatus('sent')
   }
 
   if (status === 'sent') {
@@ -51,16 +43,8 @@ export function SignInForm() {
         <p className="text-5xl">📬</p>
         <h2 className="text-xl font-bold">Check your inbox</h2>
         <p className="text-sm text-muted-foreground">
-          We emailed a sign-in link to <strong>{email}</strong>. It works once and expires in 15 minutes.
+          We emailed a sign-in link to <strong>{email}</strong>. Click it to finish signing in.
         </p>
-        {devLink && (
-          <p className="text-xs break-all rounded-md bg-muted p-3">
-            Dev mode (no email configured):{' '}
-            <a className="text-primary underline" href={devLink}>
-              open your sign-in link
-            </a>
-          </p>
-        )}
       </div>
     )
   }

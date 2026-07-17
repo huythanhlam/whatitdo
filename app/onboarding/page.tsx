@@ -1,10 +1,11 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
-import { currentUser } from '@/lib/auth/server'
+import { getUser } from '@/lib/auth/server'
 import { getCityBySlug, getDistinctNeighborhoods, listRecommendedEvents } from '@/lib/db'
 import { CATEGORIES } from '@/lib/categories'
 import { OnboardingSurvey } from '@/components/OnboardingSurvey'
 import type { RecEvent } from '@/lib/recs/client'
+import type { ActorTaste } from '@/lib/recs/score'
 
 // Post-auth onboarding. Session-gated (the survey is account-only); anonymous
 // visitors are sent to sign-in. Dynamic because it reads the session cookie.
@@ -17,15 +18,19 @@ export const metadata: Metadata = {
 
 const RECS_CITY = 'austin'
 
+const EMPTY_TASTE: ActorTaste = { affinity: new Map(), vector: null }
+const EMPTY_STATE = { hidden: new Set<string>(), seen: new Map<string, number>() }
+
 export default async function OnboardingPage() {
-  const user = await currentUser()
+  const { user } = await getUser()
   if (!user) redirect(`/signin?redirect=/onboarding`)
 
   const city = await getCityBySlug(RECS_CITY)
+  // Trending picks for step 3 (a fresh account has no taste yet).
   const [neighborhoods, recs] = await Promise.all([
     city ? getDistinctNeighborhoods(city.id) : Promise.resolve<string[]>([]),
     city
-      ? listRecommendedEvents(city.id, { userId: user.id, anonId: null }, { limit: 12 })
+      ? listRecommendedEvents(city.id, EMPTY_TASTE, EMPTY_STATE, { limit: 12 })
       : Promise.resolve({ events: [] as RecEvent[] }),
   ])
 

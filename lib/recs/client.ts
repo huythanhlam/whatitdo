@@ -40,10 +40,12 @@ export async function fetchRecommendations(
   city: string,
   surface: 'rail' | 'for_you',
   limit: number,
+  mode?: 'trending' | 'suggested',
 ): Promise<RecommendationsResponse> {
   try {
+    const modeParam = mode ? `&mode=${mode}` : ''
     const res = await fetch(
-      `/api/recommendations?city=${encodeURIComponent(city)}&surface=${surface}&limit=${limit}`,
+      `/api/recommendations?city=${encodeURIComponent(city)}&surface=${surface}&limit=${limit}${modeParam}`,
       { cache: 'no-store' },
     )
     if (!res.ok) return { events: [], serveId: null }
