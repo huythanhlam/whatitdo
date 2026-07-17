@@ -33,9 +33,12 @@ export async function GET(req: NextRequest) {
   const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 40) : RECS_DEFAULT_LIMIT
   const surfaceParam = req.nextUrl.searchParams.get('surface') ?? 'rail'
   const surface = SURFACES.has(surfaceParam) ? surfaceParam : 'rail'
+  // mode=trending forces the non-personalized (engagement-ranked) list even for a
+  // signed-in user, so the "Trending" and "Suggested for you" rails differ.
+  const trending = req.nextUrl.searchParams.get('mode') === 'trending'
 
   const { supabase, user } = await getUser()
-  const [taste, state] = user
+  const [taste, state] = user && !trending
     ? await Promise.all([getActorTaste(supabase), getActorEventState(supabase)])
     : [EMPTY_TASTE, EMPTY_STATE]
 

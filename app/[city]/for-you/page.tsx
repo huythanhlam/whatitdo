@@ -5,6 +5,8 @@ import { MapPin } from 'lucide-react'
 import { requireCity } from '@/lib/cities'
 import { isRecsCity } from '@/lib/recs/config'
 import { ForYouFeed } from '@/components/ForYouFeed'
+import { InteractionProvider } from '@/components/InteractionProvider'
+import { getUser } from '@/lib/auth/server'
 
 // Personalized to the visitor and served from a per-request API, so this page
 // itself is trivial and must not be statically cached.
@@ -22,8 +24,10 @@ export default async function ForYouPage({ params }: { params: Promise<{ city: s
   // Personalization is Austin-only at launch; elsewhere this route doesn't exist.
   if (!isRecsCity(citySlug)) notFound()
   const base = `/${city.slug}`
+  const { user } = await getUser()
 
   return (
+    <InteractionProvider city={city.slug} authed={!!user}>
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card/95 sticky top-0 z-40">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
@@ -42,5 +46,6 @@ export default async function ForYouPage({ params }: { params: Promise<{ city: s
         <ForYouFeed city={city.slug} basePath={base} />
       </div>
     </div>
+    </InteractionProvider>
   )
 }
