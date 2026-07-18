@@ -3,27 +3,18 @@ import { checkRateLimit, clientIp } from '@/lib/rateLimit'
 import { getCityBySlug } from '@/lib/db'
 import { isRecsCity } from '@/lib/recs/config'
 import { getUser } from '@/lib/auth/server'
-import { addFavorite, removeFavorite, listFavoriteIds, recordInteraction } from '@/lib/user/data'
+import { recordInteraction } from '@/lib/user/data'
 
-// Explicit actions from the cards: save (heart), interested (star), and their
-// undos, plus hide. Each is recorded as an interaction (flowing into affinity +
-// engagement + impression labeling) through the RLS-scoped Supabase client, and
-// favorites additionally keep a durable saved-list row. Sign-in required — these
-// are personalization writes; anonymous visitors get no signals.
+// Explicit actions from the cards: interested (star), its undo, and hide. Each is
+// recorded as an interaction (flowing into affinity + engagement + impression
+// labeling) through the RLS-scoped Supabase client. Sign-in required — these are
+// personalization writes; anonymous visitors get no signals.
 
 const FAV_MAX = 120
 const FAV_WINDOW_MS = 60 * 1000
-const ACTIONS = new Set(['favorite', 'unfavorite', 'interested', 'uninterested', 'hide'] as const)
-type Action = 'favorite' | 'unfavorite' | 'interested' | 'uninterested' | 'hide'
+const ACTIONS = new Set(['interested', 'uninterested', 'hide'] as const)
+type Action = 'interested' | 'uninterested' | 'hide'
 const NO_STORE = { 'Cache-Control': 'private, no-store' }
-
-export async function GET(req: NextRequest) {
-  const citySlug = req.nextUrl.searchParams.get('city') ?? ''
-  if (!isRecsCity(citySlug)) return NextResponse.json({ favorites: [] }, { headers: NO_STORE })
-  const { supabase, user } = await getUser()
-  if (!user) return NextResponse.json({ favorites: [] }, { headers: NO_STORE })
-  return NextResponse.json({ favorites: await listFavoriteIds(supabase) }, { headers: NO_STORE })
-}
 
 export async function POST(req: NextRequest) {
   if (!checkRateLimit(`fav:${clientIp(req)}`, FAV_MAX, FAV_WINDOW_MS)) {
@@ -53,8 +44,6 @@ export async function POST(req: NextRequest) {
   const serveId = typeof body.serveId === 'string' ? body.serveId : null
 
   await recordInteraction(supabase, user.id, { type: action as Action, eventId, cityId: city?.id ?? null, serveId })
-  if (action === 'favorite') await addFavorite(supabase, user.id, eventId)
-  else if (action === 'unfavorite') await removeFavorite(supabase, eventId)
 
   return NextResponse.json({ ok: true }, { headers: NO_STORE })
 }

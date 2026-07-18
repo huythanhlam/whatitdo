@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Heart, Star, X, RotateCcw } from 'lucide-react'
+import { Star, X, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { sendAction } from '@/lib/recs/client'
+import { filterAndSortByDate, type DateFilter } from '@/lib/eventDates'
 import type { SurveyPrefs } from '@/lib/recs/interests'
 
 // The account/settings page (client). Server-rendered data comes in as props; each
@@ -38,10 +39,10 @@ export function AccountView({
   prefs: initialPrefs,
   categories,
   neighborhoods,
-  favorites,
   interested,
   hidden,
   digest,
+  now,
 }: {
   email: string
   displayName: string | null
@@ -50,10 +51,12 @@ export function AccountView({
   prefs: SurveyPrefs
   categories: Cat[]
   neighborhoods: string[]
-  favorites: EventLite[]
   interested: EventLite[]
   hidden: EventLite[]
   digest: { frequency: string; confirmed: boolean } | null
+  // Server-evaluated "now" (epoch ms) — the reference for past/future. Passed in
+  // so the timestamp is stable and identical across the server and client render.
+  now: number
 }) {
   const router = useRouter()
   const [name, setName] = useState(initialName ?? '')
@@ -65,7 +68,6 @@ export function AccountView({
   const [days, setDays] = useState<Set<number>>(new Set(initialPrefs.days))
   const [savedMsg, setSavedMsg] = useState('')
 
-  const [favs, setFavs] = useState(favorites)
   const [ints, setInts] = useState(interested)
   const [hids, setHids] = useState(hidden)
 
@@ -91,10 +93,6 @@ export function AccountView({
     setSavedMsg('Saved.')
   }
 
-  function removeFavorite(id: string) {
-    setFavs(prev => prev.filter(e => e.id !== id))
-    void sendAction('unfavorite', { eventId: id, city: CITY, serveId: null })
-  }
   function removeInterested(id: string) {
     setInts(prev => prev.filter(e => e.id !== id))
     void sendAction('uninterested', { eventId: id, city: CITY, serveId: null })
@@ -114,7 +112,7 @@ export function AccountView({
     router.refresh()
   }
   async function clearHistory() {
-    if (!confirm('Clear your viewing/interaction history? Your saved events and interests are kept.')) return
+    if (!confirm('Clear your viewing/interaction history? Your interests are kept.')) return
     await fetch('/api/profile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -175,16 +173,12 @@ export function AccountView({
         </label>
       </section>
 
-      {/* Favorites */}
-      <EventList title="Saved" icon={<Heart className="w-4 h-4 text-primary" />} events={favs} empty="No saved events yet."
-        action={{ label: 'Remove', icon: <X className="w-4 h-4" />, run: removeFavorite }} />
-
       {/* Interested */}
-      <EventList title="Interested" icon={<Star className="w-4 h-4 text-amber-500" />} events={ints} empty="Nothing marked interesting yet."
+      <EventList title="Interested" icon={<Star className="w-4 h-4 text-amber-500" />} events={ints} now={now} empty="Nothing marked interesting yet."
         action={{ label: 'Remove', icon: <X className="w-4 h-4" />, run: removeInterested }} />
 
-      {/* Hidden */}
-      <EventList title="Not interested" icon={<X className="w-4 h-4 text-muted-foreground" />} events={hids} empty="You haven't hidden anything."
+      {/* Not interested */}
+      <EventList title="Not interested" icon={<X className="w-4 h-4 text-muted-foreground" />} events={hids} now={now} empty="You haven't hidden anything."
         action={{ label: 'Restore', icon: <RotateCcw className="w-4 h-4" />, run: unhide }} />
 
       {/* Digest */}
@@ -258,34 +252,81 @@ function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; chi
   )
 }
 
+const DATE_FILTERS: { key: DateFilter; label: string }[] = [
+  { key: 'upcoming', label: 'Upcoming' },
+  { key: 'past', label: 'Past' },
+  { key: 'all', label: 'All' },
+]
+
 function EventList({
   title,
   icon,
   events,
   empty,
   action,
+  now,
 }: {
   title: string
   icon: React.ReactNode
   events: EventLite[]
   empty: string
   action: { label: string; icon: React.ReactNode; run: (id: string) => void }
+  now: number
 }) {
+  // Default to upcoming: only show events that haven't passed.
+  const [filter, setFilter] = useState<DateFilter>('upcoming')
+
+  const shown = useMemo(() => filterAndSortByDate(events, now, filter), [events, filter, now])
+
   return (
     <section>
-      <h2 className="font-display text-lg font-semibold mb-3 flex items-center gap-2">{icon} {title}</h2>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="font-display text-lg font-semibold flex items-center gap-2">{icon} {title}</h2>
+        {events.length > 0 && (
+          <div className="inline-flex rounded-lg border p-0.5 text-xs">
+            {DATE_FILTERS.map(f => (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => setFilter(f.key)}
+                aria-pressed={filter === f.key}
+                className={`rounded-md px-2.5 py-1 transition-colors ${
+                  filter === f.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       {events.length === 0 ? (
         <p className="text-sm text-muted-foreground">{empty}</p>
+      ) : shown.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {filter === 'upcoming'
+            ? 'No upcoming events — switch to Past or All to see earlier ones.'
+            : filter === 'past'
+              ? 'No past events yet.'
+              : empty}
+        </p>
       ) : (
         <ul className="divide-y rounded-lg border">
-          {events.map(e => (
-            <li key={e.id} className="flex items-center gap-3 p-3">
+          {shown.map(({ item: e, past }) => (
+            <li key={e.id} className={`flex items-center gap-3 p-3 transition-opacity ${past ? 'opacity-50' : ''}`}>
               <div className="min-w-0 flex-1">
                 <Link href={`${BASE}/events/${e.id}`} className="font-medium text-sm hover:text-primary line-clamp-1">
                   {e.title}
                 </Link>
-                <p className="text-xs text-muted-foreground">
-                  {fmtDate(e.start_time)}{e.venue_name ? ` · ${e.venue_name}` : ''}
+                <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  {past && (
+                    <span className="inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide">
+                      Past
+                    </span>
+                  )}
+                  <span className="min-w-0 truncate">
+                    {fmtDate(e.start_time)}{e.venue_name ? ` · ${e.venue_name}` : ''}
+                  </span>
                 </p>
               </div>
               <button

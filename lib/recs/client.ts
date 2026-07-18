@@ -8,7 +8,7 @@ export type RecEvent = Record<string, unknown> & {
   featured_label?: string | null
 }
 
-export type RecAction = 'favorite' | 'unfavorite' | 'interested' | 'uninterested' | 'hide'
+export type RecAction = 'interested' | 'uninterested' | 'hide'
 
 // Fire an explicit action. Best-effort: resolves to whether the server accepted
 // it, never throws, so optimistic UI can proceed regardless.
@@ -52,17 +52,5 @@ export async function fetchRecommendations(
     return await res.json()
   } catch {
     return { events: [], serveId: null }
-  }
-}
-
-// The actor's saved event ids, for rendering already-saved hearts filled.
-export async function fetchFavoriteIds(city: string): Promise<Set<string>> {
-  try {
-    const res = await fetch(`/api/favorites?city=${encodeURIComponent(city)}`, { cache: 'no-store' })
-    if (!res.ok) return new Set()
-    const data = await res.json()
-    return new Set<string>(data.favorites ?? [])
-  } catch {
-    return new Set()
   }
 }

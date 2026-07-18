@@ -3,14 +3,15 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getUser } from '@/lib/auth/server'
 import { getCityBySlug, getDistinctNeighborhoods, getEventsByIds } from '@/lib/db'
-import { listUserInterests, listFavoriteIds, listInterestedEventIds, listHiddenEventIds } from '@/lib/user/data'
+import { listUserInterests, listInterestedEventIds, listHiddenEventIds } from '@/lib/user/data'
 import { CATEGORIES } from '@/lib/categories'
+import { nowMs } from '@/lib/time'
 import { AccountView } from '@/components/AccountView'
 import type { SurveyPrefs } from '@/lib/recs/interests'
 
 // The account/settings page. Session-gated via Supabase; dynamic because it reads
 // the session. User-private data comes through the RLS-scoped client; catalog
-// details (the saved/interested/hidden event cards) via the pg service path.
+// details (the interested/hidden event cards) via the pg service path.
 export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
@@ -44,18 +45,16 @@ export default async function AccountPage() {
   if (!user) redirect(`/signin?redirect=/account`)
 
   const city = await getCityBySlug(RECS_CITY)
-  const [prof, interests, favIds, intIds, hidIds, neighborhoods, digestRes] = await Promise.all([
+  const [prof, interests, intIds, hidIds, neighborhoods, digestRes] = await Promise.all([
     supabase.from('profiles').select('display_name, personalization_opt_out, magic_link_enabled').eq('id', user.id).maybeSingle(),
     listUserInterests(supabase),
-    listFavoriteIds(supabase),
     listInterestedEventIds(supabase),
     listHiddenEventIds(supabase),
     city ? getDistinctNeighborhoods(city.id) : Promise.resolve<string[]>([]),
     supabase.from('subscriptions').select('frequency, confirmed').eq('city_id', city?.id ?? 0).maybeSingle(),
   ])
 
-  const [favorites, interested, hidden] = await Promise.all([
-    getEventsByIds(favIds),
+  const [interested, hidden] = await Promise.all([
     getEventsByIds(intIds),
     getEventsByIds(hidIds),
   ])
@@ -82,10 +81,10 @@ export default async function AccountPage() {
           prefs={groupInterests(interests)}
           categories={CATEGORIES.map(c => ({ slug: c.slug, name: c.name, color: c.color }))}
           neighborhoods={neighborhoods}
-          favorites={favorites.map(toLite)}
           interested={interested.map(toLite)}
           hidden={hidden.map(toLite)}
           digest={digest}
+          now={nowMs()}
         />
       </main>
     </div>

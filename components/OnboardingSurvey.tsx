@@ -8,11 +8,11 @@ import { Button } from '@/components/ui/button'
 import { sendAction, type RecEvent } from '@/lib/recs/client'
 
 // The post-auth onboarding survey (account-only). Three skippable steps that seed
-// explicit preferences: interests → where/how-much/when → a few events to save.
+// explicit preferences: interests → where/how-much/when → a few events you're into.
 // Picks are submitted to /api/onboarding at the end (which writes interests +
-// live affinity + a taste vector and stamps onboarded_at); saved events are sent
-// live as favorites. Skipping still submits (empty is fine) so onboarded_at is
-// stamped and the survey never reappears.
+// live affinity + a taste vector and stamps onboarded_at); picked events are sent
+// live as interested signals. Skipping still submits (empty is fine) so
+// onboarded_at is stamped and the survey never reappears.
 
 type Cat = { slug: string; name: string; color: string }
 const DAYS = [
@@ -62,7 +62,7 @@ export function OnboardingSurvey({
   function saveEvent(id: string) {
     const isSaving = !saved.has(id)
     toggle(saved, id, setSaved)
-    void sendAction(isSaving ? 'favorite' : 'unfavorite', { eventId: id, city, serveId: null })
+    void sendAction(isSaving ? 'interested' : 'uninterested', { eventId: id, city, serveId: null })
   }
 
   async function finish() {
@@ -180,7 +180,7 @@ export function OnboardingSurvey({
       {step === 3 && (
         <section>
           <h1 className="font-display text-2xl font-semibold mb-1">Anything you already love?</h1>
-          <p className="text-sm text-muted-foreground mb-5">Save a few and we’ll learn from them right away.</p>
+          <p className="text-sm text-muted-foreground mb-5">Mark a few you’re interested in and we’ll learn from them right away.</p>
           {topEvents.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {topEvents.map(ev => {
