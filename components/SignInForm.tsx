@@ -11,9 +11,14 @@ import { createClient } from '@/lib/supabase/browser'
 // email sent). Passwordless magic-link is a secondary, per-account opt-in: the
 // "email me a link" path posts to /api/auth/magic-link, which only sends an OTP
 // if that account enabled it — so email sends stay rare and deliberate.
-export function SignInForm() {
+//
+// The post-auth destination comes from `redirectTo` when provided (the "join"
+// gate and the sign-up form pass the CTA's intended landing spot) and otherwise
+// falls back to the `?redirect=` search param (the standalone /signin page). It
+// drives both the password redirect and the "Create an account" link.
+export function SignInForm({ redirectTo }: { redirectTo?: string }) {
   const params = useSearchParams()
-  const redirect = params.get('redirect') ?? ''
+  const redirect = redirectTo ?? params.get('redirect') ?? ''
   const linkError = params.get('error') === 'link'
   const signupHref = `/signup${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''}`
 

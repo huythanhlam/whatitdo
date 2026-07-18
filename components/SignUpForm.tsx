@@ -13,9 +13,14 @@ const MIN_PASSWORD = 8
 // supabase/config.toml) signUp sends no email and returns a session immediately,
 // so we go straight to onboarding. Display name is optional and best-effort
 // written to the profile row (created by the on-signup trigger).
-export function SignUpForm() {
+//
+// `redirectTo` (from the "join" registration gate) is the destination the CTA
+// promised. It rides through onboarding as `?next=` so finishing/skipping the
+// survey lands the new account there instead of the city home; falls back to
+// the `?redirect=` search param for the standalone /signup page.
+export function SignUpForm({ redirectTo }: { redirectTo?: string }) {
   const params = useSearchParams()
-  const redirect = params.get('redirect') ?? ''
+  const redirect = redirectTo ?? params.get('redirect') ?? ''
   const signinHref = `/signin${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ''}`
 
   const [email, setEmail] = useState('')
@@ -48,8 +53,9 @@ export function SignUpForm() {
     if (name && data.user) {
       await supabase.from('profiles').update({ display_name: name }).eq('id', data.user.id)
     }
-    // Full navigation so the server sees the freshly set session cookie.
-    window.location.href = '/onboarding'
+    // Full navigation so the server sees the freshly set session cookie. Carry
+    // the CTA destination through onboarding so finish/skip lands there.
+    window.location.href = redirect ? `/onboarding?next=${encodeURIComponent(redirect)}` : '/onboarding'
   }
 
   return (

@@ -192,6 +192,14 @@ export default async function CityHomePage({
   const authed = !!user
   const recs = isRecsCity(citySlug)
 
+  // On a recs city, a logged-out visitor's landing CTAs route through the /join
+  // registration gate (which motivates sign-up, then onboards, then lands them
+  // on the promised view). Signed-in visitors — and non-recs cities, which have
+  // no auth/onboarding surface — keep the direct deep links.
+  const gated = recs && !authed
+  const browseHref = gated ? `${base}/join?intent=browse` : `${base}#events`
+  const weekendHref = gated ? `${base}/join?intent=weekend` : `${base}?when=weekend#events`
+
   return (
     <div className="min-h-screen bg-background">
       <HeaderHeightSync />
@@ -258,13 +266,13 @@ export default async function CityHomePage({
             </p>
             <div className="mt-7 flex flex-wrap items-center gap-3">
               <Link
-                href={`${base}#events`}
+                href={browseHref}
                 className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
               >
                 Browse Events <ArrowRight className="w-4 h-4" />
               </Link>
               <Link
-                href={`${base}?when=weekend#events`}
+                href={weekendHref}
                 className="inline-flex items-center rounded-full border border-border bg-card px-6 py-3 text-sm font-semibold text-foreground hover:border-primary hover:text-primary transition-colors"
               >
                 This Weekend
@@ -295,7 +303,7 @@ export default async function CityHomePage({
           <section className="border-b border-border bg-card/50">
             <div className="max-w-7xl mx-auto px-4 py-6">
               <h2 className="font-display text-lg font-semibold text-foreground mb-3">Browse by category</h2>
-              <CategoryCarousel basePath={base} />
+              <CategoryCarousel basePath={base} gated={gated} />
             </div>
           </section>
         )}
