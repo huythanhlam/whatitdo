@@ -1,11 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { Heart, Star, X } from 'lucide-react'
+import { Star, X } from 'lucide-react'
 import { sendAction } from '@/lib/recs/client'
 import { useInteractions } from './InteractionProvider'
 
-// The save / interested / not-interested overlay for an event card. Rendered by
+// The interested / not-interested overlay for an event card. Rendered by
 // EventCard on every card, but only shows for signed-in users (via the shared
 // InteractionProvider) — so we gather explicit signals across the whole catalog.
 // Best-effort + optimistic, like the rec rails. `serveId` credits the impression
@@ -23,7 +23,6 @@ export function EventCardActions({
   const [interested, setInterested] = useState(false)
   if (!ctx || !ctx.authed) return null
 
-  const favorited = ctx.favorited.has(eventId)
   const stop = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
@@ -31,17 +30,6 @@ export function EventCardActions({
 
   return (
     <div className="absolute top-2 right-2 z-20 flex gap-1">
-      <IconButton
-        label={favorited ? 'Remove from saved' : 'Save'}
-        active={favorited}
-        activeClass="bg-primary text-primary-foreground"
-        onClick={e => {
-          stop(e)
-          ctx.toggleFavorite(eventId, serveId)
-        }}
-      >
-        <Heart className="w-4 h-4" fill={favorited ? 'currentColor' : 'none'} />
-      </IconButton>
       <IconButton
         label={interested ? 'Not interested anymore' : 'Interested'}
         active={interested}

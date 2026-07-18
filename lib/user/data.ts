@@ -21,21 +21,6 @@ import type { ActorTaste, FeatureVector } from '@/lib/recs/score'
 
 type SB = SupabaseClient
 
-// --- Favorites -------------------------------------------------------------
-
-export async function addFavorite(sb: SB, userId: string, eventId: string): Promise<void> {
-  await sb.from('favorites').upsert({ user_id: userId, event_id: eventId }, { onConflict: 'user_id,event_id' })
-}
-
-export async function removeFavorite(sb: SB, eventId: string): Promise<void> {
-  await sb.from('favorites').delete().eq('event_id', eventId)
-}
-
-export async function listFavoriteIds(sb: SB): Promise<string[]> {
-  const { data } = await sb.from('favorites').select('event_id').order('created_at', { ascending: false })
-  return (data ?? []).map(r => r.event_id as string)
-}
-
 // --- Interactions (the write-through signal path) --------------------------
 
 type EventCtx = {
@@ -243,8 +228,8 @@ export async function markOnboarded(sb: SB, userId: string): Promise<void> {
   await sb.from('profiles').update({ onboarded_at: new Date().toISOString() }).eq('id', userId).is('onboarded_at', null)
 }
 
-// "Clear my history": delete the actor's behavioral + derived rows (favorites and
-// stated interests are kept — they're the saved list, not history).
+// "Clear my history": delete the actor's behavioral + derived rows (stated
+// interests are kept — they're preferences, not history).
 export async function clearHistory(sb: SB): Promise<void> {
   await Promise.all([
     sb.from('interactions').delete().neq('id', 0),

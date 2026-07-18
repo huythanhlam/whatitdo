@@ -266,7 +266,7 @@ export async function getEvent(id: string): Promise<EnrichedEvent | null> {
 }
 
 // Enriched events for a set of ids, in the given order — for the account page's
-// saved / interested / hidden lists. Past events are included (unlike the rail),
+// interested / hidden lists. Past events are included (unlike the rail),
 // since the profile shows history; the caller orders/greys them.
 export async function getEventsByIds(ids: string[]): Promise<EnrichedEvent[]> {
   if (ids.length === 0) return []

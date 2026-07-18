@@ -5,9 +5,9 @@ import { type RecEvent } from '@/lib/recs/client'
 import type { EnrichedEvent } from '@/lib/types'
 
 // Thin adapter: a recommendation result rendered as the standard EventCard. The
-// save/interested/hide overlay now lives in EventCard (via InteractionProvider),
-// so this just maps RecEvent → EventCard and forwards the rec context (serveId
-// for impression crediting, onHide so a rail can drop the card).
+// interested/hide overlay now lives in EventCard (via InteractionProvider), so
+// this just maps RecEvent → EventCard and forwards the rec context (serveId for
+// impression crediting, onHide so a rail can drop the card).
 export function RecEventCard({
   event,
   basePath,
@@ -18,7 +18,6 @@ export function RecEventCard({
   basePath: string
   city?: string
   serveId: string | null
-  initialFavorited?: boolean
   onHide: (id: string) => void
 }) {
   return (
