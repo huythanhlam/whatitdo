@@ -68,6 +68,15 @@ export default async function EventDetailPage({
   const provider = getTicketProvider(event.ticket_url)
   const ticketCta = provider ? (event.is_free ? 'RSVP / Details' : provider.cta) : null
   const jsonLd = eventJsonLd(event, citySlug, city.name)
+  // Event fields (title/description/venue) come from scraped, attacker-authorable
+  // third-party listings. Raw JSON.stringify does not escape `<`, so a title like
+  // `</script><script>…` would break out of this inline script tag (stored XSS).
+  // Escape the HTML-significant characters to `\uXXXX` — still valid JSON that
+  // schema.org consumers parse identically, but inert to the HTML parser.
+  const jsonLdHtml = JSON.stringify(jsonLd)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
   // Personalization is Austin-only at launch; only then do we log view/clickout.
   const recsOn = isRecsCity(citySlug)
   // Cross-source provenance: the distinct other sources that also listed this
@@ -77,7 +86,7 @@ export default async function EventDetailPage({
 
   return (
     <div className="min-h-screen bg-background">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml }} />
       {recsOn && <TrackBeacon eventId={event.id} city={citySlug} />}
       <header className="border-b bg-card/95 sticky top-0 z-40">
         <div className="max-w-3xl mx-auto px-4 py-3">
