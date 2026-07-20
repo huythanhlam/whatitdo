@@ -28,6 +28,7 @@ export const INTERACTION_TYPES = [
   'share',
   'search',
   'digest_click',
+  'attended',
 ] as const
 
 export type InteractionType = (typeof INTERACTION_TYPES)[number]
@@ -44,6 +45,7 @@ export const POSITIVE_ENGAGEMENT_TYPES: ReadonlySet<InteractionType> = new Set([
   'interested',
   'clickout',
   'calendar_add',
+  'attended',
 ])
 
 // A negative signal actively pushes an event/category down for that actor.
@@ -61,6 +63,7 @@ export const SIGNAL_MAGNITUDE: Record<InteractionType, number> = {
   interested: 2.5,
   clickout: 3.0,
   calendar_add: 3.0,
+  attended: 4.0,
   share: 2.0,
   view: 1.0,
   digest_click: 2.0,

@@ -12,6 +12,7 @@ import { HeroCarousel } from '@/components/HeroCarousel'
 import { CategoryCarousel } from '@/components/CategoryCarousel'
 import { RecRail } from '@/components/RecRail'
 import { InteractionProvider } from '@/components/InteractionProvider'
+import { RewardsProvider } from '@/components/RewardsProvider'
 import { AuthNav } from '@/components/AuthNav'
 import { getUser } from '@/lib/auth/server'
 import { BackToTopButton } from '@/components/BackToTopButton'
@@ -297,6 +298,7 @@ export default async function CityHomePage({
           rails, then the full events list; no category row. The provider gives
           every EventCard working save/interested/hide buttons for signed-in users. */}
       <InteractionProvider city={city.slug} authed={recs && authed}>
+        <RewardsProvider>
         {/* Browse by category — a bold, single-click way into a filtered result
             set; SidebarFilters below still handles multi-select refinement. */}
         {(!recs || !authed) && (
@@ -390,6 +392,7 @@ export default async function CityHomePage({
         </main>
       </div>
         )}
+        </RewardsProvider>
       </InteractionProvider>
 
       <BackToTopButton />

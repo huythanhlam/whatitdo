@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input'
 import { sendAction } from '@/lib/recs/client'
 import { filterAndSortByDate, type DateFilter } from '@/lib/eventDates'
 import type { SurveyPrefs } from '@/lib/recs/interests'
+import { RewardsPanel } from '@/components/RewardsPanel'
+import type { RewardsSummary } from '@/lib/rewards/data'
 
 // The account/settings page (client). Server-rendered data comes in as props; each
 // section edits through the /api/profile + /api/favorites endpoints. Kept to plain
@@ -42,6 +44,7 @@ export function AccountView({
   interested,
   hidden,
   digest,
+  rewards,
   now,
 }: {
   email: string
@@ -54,6 +57,7 @@ export function AccountView({
   interested: EventLite[]
   hidden: EventLite[]
   digest: { frequency: string; confirmed: boolean } | null
+  rewards: RewardsSummary
   // Server-evaluated "now" (epoch ms) — the reference for past/future. Passed in
   // so the timestamp is stable and identical across the server and client render.
   now: number
@@ -172,6 +176,9 @@ export function AccountView({
           Mostly interested in free events
         </label>
       </section>
+
+      {/* Rewards */}
+      <RewardsPanel summary={rewards} />
 
       {/* Interested */}
       <EventList title="Interested" icon={<Star className="w-4 h-4 text-amber-500" />} events={ints} now={now} empty="Nothing marked interesting yet."
