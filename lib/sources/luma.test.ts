@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { eventsFromEntries, slugFromUrl, placeApiIdFromNextData } from './luma'
+import { eventsFromEntries, slugFromUrl, placeApiIdFromNextData, stateFromAddress } from './luma'
 
 function entry(overrides: Record<string, unknown> = {}, ticketOverrides: Record<string, unknown> | null = {}) {
   return {
@@ -58,6 +58,36 @@ describe('placeApiIdFromNextData', () => {
     expect(placeApiIdFromNextData(undefined)).toBeNull()
     expect(placeApiIdFromNextData('not an object')).toBeNull()
     expect(placeApiIdFromNextData({})).toBeNull()
+  })
+})
+
+describe('stateFromAddress', () => {
+  it('resolves a trailing two-letter code', () => {
+    expect(stateFromAddress('701 Brazos St, Austin, TX 78701, USA')).toBe('TX')
+  })
+
+  it('resolves Washington, DC via the two-letter code', () => {
+    expect(stateFromAddress('Pubkey, 410 7th St NW, Washington, DC 20004, USA')).toBe('DC')
+  })
+
+  it('resolves a spelled-out state name', () => {
+    expect(stateFromAddress('Arlington, Virginia')).toBe('VA')
+    expect(stateFromAddress('Laurel, Maryland')).toBe('MD')
+  })
+
+  it('resolves a spelled-out state name with a trailing zip and country', () => {
+    expect(stateFromAddress('123 Main St, Fairfax, Virginia 22033, USA')).toBe('VA')
+  })
+
+  it('prefers a two-letter code over a spelled-out name when both are present', () => {
+    // A city literally named after a state should not shadow the real code.
+    expect(stateFromAddress('Austin, TX')).toBe('TX')
+  })
+
+  it('returns null for an address with no resolvable state', () => {
+    expect(stateFromAddress('Online')).toBeNull()
+    expect(stateFromAddress(null)).toBeNull()
+    expect(stateFromAddress('Somewhere unlabeled')).toBeNull()
   })
 })
 

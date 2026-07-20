@@ -127,19 +127,52 @@ function toRawEvent(entry: LumaEntry, source: string): RawEvent | null {
   }
 }
 
-// The place_api_id geo search (see module comment) is a fuzzy radius search,
-// not a hard city boundary — it has been observed to surface events whose
-// geo_address_info is a genuinely different city/state (e.g. DC events
-// leaking into the Austin feed). venue_address always ends in a "City, ST
-// [zip,] USA"-shaped tail when Luma has a real postal address, so a mismatch
-// there is a reliable signal; an address that doesn't parse (or is absent,
-// e.g. online events) is left alone rather than guessed at, since a false
-// reject (hiding a real local event) is a worse failure than a rare
-// unfiltered false positive.
+// Full state-name → USPS code, for addresses Luma writes with the state
+// spelled out (e.g. "Arlington, Virginia"). "washington dc" maps to DC; bare
+// "washington" is the state (WA). Used only as a fallback when no trailing
+// two-letter code is present.
+const STATE_NAMES: Record<string, string> = {
+  alabama: 'AL', alaska: 'AK', arizona: 'AZ', arkansas: 'AR', california: 'CA',
+  colorado: 'CO', connecticut: 'CT', delaware: 'DE', florida: 'FL', georgia: 'GA',
+  hawaii: 'HI', idaho: 'ID', illinois: 'IL', indiana: 'IN', iowa: 'IA',
+  kansas: 'KS', kentucky: 'KY', louisiana: 'LA', maine: 'ME', maryland: 'MD',
+  massachusetts: 'MA', michigan: 'MI', minnesota: 'MN', mississippi: 'MS',
+  missouri: 'MO', montana: 'MT', nebraska: 'NE', nevada: 'NV',
+  'new hampshire': 'NH', 'new jersey': 'NJ', 'new mexico': 'NM', 'new york': 'NY',
+  'north carolina': 'NC', 'north dakota': 'ND', ohio: 'OH', oklahoma: 'OK',
+  oregon: 'OR', pennsylvania: 'PA', 'rhode island': 'RI', 'south carolina': 'SC',
+  'south dakota': 'SD', tennessee: 'TN', texas: 'TX', utah: 'UT', vermont: 'VT',
+  virginia: 'VA', washington: 'WA', 'west virginia': 'WV', wisconsin: 'WI',
+  wyoming: 'WY', 'district of columbia': 'DC', 'washington dc': 'DC',
+}
+
+// The paginated geo search (see module comment) is a fuzzy radius, not a hard
+// city boundary — it surfaces some events in a genuinely different city/state
+// (e.g. a neighboring metro leaking into the feed). venue_address ends in a
+// "City, ST [zip,] USA"-shaped tail when Luma has a real postal address, so a
+// state mismatch there is a reliable signal. A trailing two-letter code is
+// preferred; failing that, a spelled-out state name ("Arlington, Virginia") is
+// resolved. An address that resolves to neither (or is absent, e.g. online
+// events) is left alone rather than guessed at, since a false reject (hiding a
+// real local event) is a worse failure than a rare unfiltered false positive.
 export function stateFromAddress(address: string | null): string | null {
   if (!address) return null
-  const m = address.match(/,\s*([A-Za-z]{2})\b/)
-  return m ? m[1].toUpperCase() : null
+  // Prefer an explicit trailing two-letter code ("…, TX", "…, DC", "…, VA").
+  const code = address.match(/,\s*([A-Za-z]{2})\b/)
+  if (code) return code[1].toUpperCase()
+  // Fall back to a spelled-out state name in any comma-delimited segment,
+  // stripping periods, digits (zip), and a trailing country so
+  // "…, Virginia 22201, USA" still resolves.
+  for (const seg of address.split(',')) {
+    const norm = seg
+      .toLowerCase()
+      .replace(/\b(usa|united states)\b/g, '')
+      .replace(/[.\d]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (STATE_NAMES[norm]) return STATE_NAMES[norm]
+  }
+  return null
 }
 
 // Pure entries[] -> events reduction (no network), so it's unit-testable
