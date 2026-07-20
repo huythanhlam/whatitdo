@@ -80,7 +80,23 @@ async function runSource(source: SourceRow, city: City): Promise<{ upserted: num
 // maxDuration/Gemini-RPM budget is never shared across cities). Omitting it
 // preserves the original all-cities-in-one-run behavior for local/manual
 // triggering (README's `curl -X POST /api/ingest`) and as a fallback.
-async function runIngest(cityFilter?: string) {
+//
+// `?source=a,b` (include-only) and `?exclude=a,b` (skip these) further scope a
+// run to a subset of the city's enabled sources, matched by `sources.name`.
+// This lets a heavy source that can't finish inside a shared 300s invocation
+// get its OWN cron window: a source like `crawl:meetup-com` sweeps ~280 events
+// (whose persist warms geocode/venue caches) and, when it competes with ~50
+// other sources for one invocation's wall-clock and DB pool, is reliably still
+// running when maxDuration kills the function — orphaning it at 'running' and
+// persisting nothing. So the bulk cron `exclude`s it and a dedicated cron runs
+// it `source`-scoped, mirroring the per-city split above.
+function parseNameSet(v: string | null): Set<string> | null {
+  if (!v) return null
+  const names = v.split(',').map(s => s.trim()).filter(Boolean)
+  return names.length ? new Set(names) : null
+}
+
+async function runIngest(cityFilter?: string, sourceFilter?: string | null, excludeFilter?: string | null) {
   // Ingestion is driven entirely by the `sources` table (Phase 2B), looped over
   // every enabled city (Phase 3): enabled rows for each city, each dispatched to
   // its parser mechanism. Adding coverage is an INSERT, not a code change.
@@ -91,8 +107,13 @@ async function runIngest(cityFilter?: string) {
     return NextResponse.json({ error: `Unknown or disabled city "${cityFilter}"` }, { status: 400 })
   }
 
+  const only = parseNameSet(sourceFilter ?? null)
+  const skip = parseNameSet(excludeFilter ?? null)
+
   const perCity = await Promise.all(cities.map(async city => {
-    const sources = await getEnabledSources(city.id)
+    let sources = await getEnabledSources(city.id)
+    if (only) sources = sources.filter(s => only.has(s.name))
+    if (skip) sources = sources.filter(s => !skip.has(s.name))
     const results = await Promise.all(
       sources.map(async source => ({ name: source.name, ...(await runSource(source, city)) }))
     )
@@ -115,10 +136,15 @@ async function runIngest(cityFilter?: string) {
   return NextResponse.json({ ...totals, byCity: perCity, mode: isLocal() ? 'local' : 'supabase' })
 }
 
+function paramsOf(req: NextRequest): [string | undefined, string | null, string | null] {
+  const p = req.nextUrl.searchParams
+  return [p.get('city') ?? undefined, p.get('source'), p.get('exclude')]
+}
+
 export async function POST(req: NextRequest) {
   const denied = requireCronAuth(req)
   if (denied) return denied
-  return runIngest(req.nextUrl.searchParams.get('city') ?? undefined)
+  return runIngest(...paramsOf(req))
 }
 
 // Vercel Cron invokes scheduled jobs with a GET request (carrying the
@@ -126,5 +152,5 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const denied = requireCronAuth(req)
   if (denied) return denied
-  return runIngest(req.nextUrl.searchParams.get('city') ?? undefined)
+  return runIngest(...paramsOf(req))
 }

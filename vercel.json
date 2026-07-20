@@ -1,12 +1,16 @@
 {
   "crons": [
     {
-      "path": "/api/ingest?city=austin",
+      "path": "/api/ingest?city=austin&exclude=crawl:meetup-com",
       "schedule": "0 6 * * *"
     },
     {
       "path": "/api/ingest?city=houston",
       "schedule": "15 6 * * *"
+    },
+    {
+      "path": "/api/ingest?city=austin&source=crawl:meetup-com",
+      "schedule": "30 6 * * *"
     },
     {
       "path": "/api/email/digest?frequency=daily",
