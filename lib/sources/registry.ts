@@ -15,6 +15,7 @@ import { fetchCultureMapEvents } from './culturemap'
 import { fetchMeetupEvents } from './meetup'
 import { fetchLumaEvents } from './luma'
 import { fetchMeanwhileEvents } from './meanwhile'
+import { fetchAustinMonthlyEvents } from './austinmonthly'
 import { extractEvents } from '@/lib/extractor'
 
 const has = (v: string | undefined): boolean => !!v && v.length > 0
@@ -92,6 +93,18 @@ export const PARSERS: Record<string, SourceParser> = {
   // list's own "Next" pagination link to exhaustion and captures each item's
   // event-specific flyer image from its `background-image` style.
   meanwhile: simple(() => true, (url, name) => fetchMeanwhileEvents(url!, name)),
+
+  // austinmonthly.com/calendar/: WP custom calendar. Two structured passes,
+  // no Gemini — paginate its admin-ajax load-more for all detail-page URLs,
+  // then read each page's schema.org Event JSON-LD. Honors sources.max_pages
+  // (each page = 10 events) to bound the rolling window's listing crawl.
+  austinmonthly: {
+    available: () => true,
+    fetch: async (source, ctx) => ({
+      events: withKind(source, await fetchAustinMonthlyEvents(source.url!, source.name, ctx.since, source.max_pages)),
+      skipped: false,
+    }),
+  },
 
   // Crawl: content-hash aware, returns its own skip flag.
   crawl: {
