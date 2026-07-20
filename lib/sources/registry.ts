@@ -78,14 +78,14 @@ export const PARSERS: Record<string, SourceParser> = {
   meetup: simple(() => true, (url, name) => fetchMeetupEvents(url!, name)),
 
   // luma.com/<city-slug>: public, unauthenticated JSON API behind the
-  // discover page. `url` is the human discover page (e.g.
-  // https://luma.com/austin); the parser resolves its place_api_id and
-  // paginates the full geo-search on it (much bigger than the page's own
-  // capped "Popular events" feed), no Gemini. That geo search is a fuzzy
-  // radius, not a hard city boundary, so `ctx.city.state` is passed through
-  // to drop any entry whose address resolves to a different state (e.g. a DC
-  // event leaking into the Austin feed).
-  luma: simple(() => true, (url, name, ctx) => fetchLumaEvents(url!, name, ctx.city.state)),
+  // discover page. Luma geo-locates that API by the caller's IP, so the
+  // city's stored coordinates are passed as latitude/longitude to pin results
+  // to the city regardless of the server region (our cron runs in the DC
+  // metro). `url` is retained only as the human discover page for the UI. The
+  // radius is fuzzy, not a hard boundary, so `ctx.city.state` is also passed
+  // as a backstop to drop any entry whose address resolves to another state.
+  luma: simple(() => true, (url, name, ctx) =>
+    fetchLumaEvents(url!, name, { targetState: ctx.city.state, lat: ctx.city.lat, lng: ctx.city.lng })),
 
   // meanwhilebeer.com/events: static server-rendered Webflow CMS collection
   // list, no Gemini. `url` is the events index page; the parser follows the

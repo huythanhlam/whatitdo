@@ -25,7 +25,7 @@ export type RawEvent = {
 // SeatGeek) to query the right geography — previously a bare 'austin' string
 // that nothing actually read.
 export type SourceContext = {
-  city: { id: number; slug: string; name: string; state: string }
+  city: { id: number; slug: string; name: string; state: string; lat: number | null; lng: number | null }
   since: Date
   logger: Pick<Console, 'log' | 'warn' | 'error'>
 }
