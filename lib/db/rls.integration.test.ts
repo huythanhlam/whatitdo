@@ -131,6 +131,45 @@ describe('per-user isolation (RLS)', () => {
     )
     expect((await rows(`SELECT 1 FROM interactions`)).length).toBeGreaterThan(0)
   })
+
+  it('a signed-in user can record an attendance check-in', async () => {
+    await actAs(USER_A, 'authenticated')
+    await rows(
+      `INSERT INTO interactions (user_id, city_id, event_id, type) VALUES (auth.uid(), 1, $1, 'attended')`,
+      [eventIds[1]]
+    )
+    expect((await rows(`SELECT 1 FROM interactions WHERE type = 'attended'`)).length).toBe(1)
+  })
+
+  it('a user reads and writes only their own badges', async () => {
+    await actAs(USER_A, 'authenticated')
+    await rows(`INSERT INTO user_badges (user_id, badge_id, points) VALUES (auth.uid(), 'first_timer', 15)`)
+    expect(await rows(`SELECT badge_id FROM user_badges`)).toHaveLength(1)
+
+    await actAs(USER_B, 'authenticated')
+    // B cannot see A's badge, nor update/delete it (RLS silently filters).
+    expect(await rows(`SELECT badge_id FROM user_badges`)).toHaveLength(0)
+    await rows(`UPDATE user_badges SET points = 999`)
+    await rows(`DELETE FROM user_badges`)
+
+    await actAs(USER_A, 'authenticated')
+    const still = await rows<{ points: number }>(`SELECT points FROM user_badges`)
+    expect(still).toHaveLength(1)
+    expect(still[0].points).toBe(15) // untouched by B
+  })
+
+  it('WITH CHECK blocks forging a badge as another user', async () => {
+    await actAs(USER_A, 'authenticated')
+    expect(await rejects(
+      `INSERT INTO user_badges (user_id, badge_id) VALUES ($1, 'regular')`,
+      [USER_B]
+    )).toBe(true)
+  })
+
+  it('anon cannot read the badges table', async () => {
+    await actAs(null, 'anon')
+    expect(await rejects(`SELECT * FROM user_badges`)).toBe(true)
+  })
 })
 
 describe('public catalog (event metadata is not RLS-gated)', () => {

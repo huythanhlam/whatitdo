@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { getUser } from '@/lib/auth/server'
 import { getCityBySlug, getDistinctNeighborhoods, getEventsByIds } from '@/lib/db'
 import { listUserInterests, listInterestedEventIds, listHiddenEventIds } from '@/lib/user/data'
+import { syncRewards } from '@/lib/rewards/data'
 import { CATEGORIES } from '@/lib/categories'
 import { nowMs } from '@/lib/time'
 import { AccountView } from '@/components/AccountView'
@@ -45,13 +46,16 @@ export default async function AccountPage() {
   if (!user) redirect(`/signin?redirect=/account`)
 
   const city = await getCityBySlug(RECS_CITY)
-  const [prof, interests, intIds, hidIds, neighborhoods, digestRes] = await Promise.all([
+  const [prof, interests, intIds, hidIds, neighborhoods, digestRes, rewards] = await Promise.all([
     supabase.from('profiles').select('display_name, personalization_opt_out, magic_link_enabled').eq('id', user.id).maybeSingle(),
     listUserInterests(supabase),
     listInterestedEventIds(supabase),
     listHiddenEventIds(supabase),
     city ? getDistinctNeighborhoods(city.id) : Promise.resolve<string[]>([]),
     supabase.from('subscriptions').select('frequency, confirmed').eq('city_id', city?.id ?? 0).maybeSingle(),
+    // Recompute-on-read: self-heals badges earned via low-signal actions and
+    // awards any retroactively from the user's full history. Best-effort.
+    syncRewards(supabase, user.id, nowMs()),
   ])
 
   const [interested, hidden] = await Promise.all([
@@ -84,6 +88,7 @@ export default async function AccountPage() {
           interested={interested.map(toLite)}
           hidden={hidden.map(toLite)}
           digest={digest}
+          rewards={rewards}
           now={nowMs()}
         />
       </main>

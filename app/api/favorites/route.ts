@@ -4,6 +4,7 @@ import { getCityBySlug } from '@/lib/db'
 import { isRecsCity } from '@/lib/recs/config'
 import { getUser } from '@/lib/auth/server'
 import { recordInteraction } from '@/lib/user/data'
+import { syncRewards } from '@/lib/rewards/data'
 
 // Explicit actions from the cards: interested (star), its undo, and hide. Each is
 // recorded as an interaction (flowing into affinity + engagement + impression
@@ -45,5 +46,9 @@ export async function POST(req: NextRequest) {
 
   await recordInteraction(supabase, user.id, { type: action as Action, eventId, cityId: city?.id ?? null, serveId })
 
-  return NextResponse.json({ ok: true }, { headers: NO_STORE })
+  // A save can cross a badge threshold (e.g. Wishlist Wizard); surface any newly
+  // earned badges so the client can celebrate. Best-effort — never fails the action.
+  const summary = await syncRewards(supabase, user.id)
+
+  return NextResponse.json({ ok: true, newlyEarned: summary.newlyEarned }, { headers: NO_STORE })
 }

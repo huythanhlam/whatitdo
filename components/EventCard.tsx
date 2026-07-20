@@ -4,7 +4,9 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { FeaturedBadge } from './FeaturedBadge'
 import { EventCardActions } from './EventCardActions'
+import { EventCheckInButton } from './EventCheckInButton'
 import { getTicketProvider } from '@/lib/tickets'
+import { nowMs } from '@/lib/time'
 import type { EnrichedEvent } from '@/lib/types'
 
 type Props = {
@@ -23,6 +25,8 @@ export function EventCard({ event, basePath, featured = false, featuredLabel, se
   const date = new Date(event.start_time)
   const dateStr = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
   const timeStr = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  // Server-computed so the check-in button's time gate has no SSR/CSR mismatch.
+  const hasStarted = date.getTime() <= nowMs()
 
   const priceLabel = event.is_free
     ? 'Free'
@@ -107,6 +111,9 @@ export function EventCard({ event, basePath, featured = false, featuredLabel, se
           🎟 {ticketCta} →
         </a>
       )}
+
+      {/* Attendance check-in: only renders for signed-in users once the event has started. */}
+      <EventCheckInButton eventId={event.id} started={hasStarted} />
     </Card>
   )
 }
