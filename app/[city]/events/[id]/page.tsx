@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { isRecsCity } from '@/lib/recs/config'
 import { TrackBeacon } from '@/components/TrackBeacon'
 import { TicketLink } from '@/components/TicketLink'
+import { ShareButton } from '@/components/ShareButton'
 import type { EnrichedEvent } from '@/lib/types'
 
 // Event content changes rarely once ingested; cache each detail page and
@@ -162,6 +163,12 @@ export default async function EventDetailPage({
           <Button variant="outline" asChild>
             <Link href={`/${citySlug}/subscribe`}>🔔 Get event alerts</Link>
           </Button>
+          <ShareButton
+            url={`${getBaseUrl()}/${citySlug}/events/${event.id}`}
+            title={event.title}
+            city={citySlug}
+            eventId={event.id}
+          />
         </div>
         {event.ticket_url && provider && provider.name !== 'venue site' && (
           <p className="mt-2 text-xs text-muted-foreground">Tickets provided by {provider.name}</p>
