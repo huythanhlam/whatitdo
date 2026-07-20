@@ -4,6 +4,19 @@
 
 export const TZ = 'America/Chicago'
 
+// How far ahead the roundup crawlers (culturemap, tribe-events, the
+// austintexas.gov index) reach on every run: a rolling ~2-month window
+// recomputed from "now" each ingest. This is a coverage *floor* that drives
+// loop length / pagination depth / stop conditions — events further out are
+// still kept when a page happens to list them (the only upper bound is the
+// ~18-month ceiling in lib/persist.ts). Shared so all three stay in sync.
+export const LOOKAHEAD_DAYS = 60
+
+// UTC ms of the far edge of the lookahead window (now + LOOKAHEAD_DAYS).
+export function lookaheadHorizonMs(): number {
+  return Date.now() + LOOKAHEAD_DAYS * 24 * 60 * 60 * 1000
+}
+
 export type WhenPreset = 'today' | 'week' | 'weekend' | 'month'
 export const WHEN_PRESETS: { value: WhenPreset; label: string }[] = [
   { value: 'today', label: 'Today' },
