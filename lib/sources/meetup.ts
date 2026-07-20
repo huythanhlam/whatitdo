@@ -193,19 +193,45 @@ async function fetchApolloState(url: string): Promise<ApolloState | null> {
   }
 }
 
+// How many of the (1 + TOPIC_KEYWORDS.length) find pages to fetch at once.
+// The sweep was originally strictly sequential ("no latency pressure to
+// justify hammering meetup.com"), but that made its worst case 17 pages x the
+// 20s per-fetch timeout = ~340s, which overran the ingest function's 300s
+// maxDuration whenever meetup.com throttled the datacenter IP running the
+// cron: every daily run was force-killed mid-sweep, so this source never
+// persisted a single event and its source_runs row stayed stuck at 'running'.
+// A small pool caps the worst case at ceil(N / FETCH_CONCURRENCY) x 20s
+// (~60s for 17 pages) while staying far short of firing all 17 at once — a
+// polite middle ground, since over-parallelizing risks the very throttling
+// that caused the timeout.
+const FETCH_CONCURRENCY = 6
+
+// Bounded-concurrency map, kept local so this deliberately no-Gemini parser
+// needs no import from lib/gemini (where the equivalent mapPool lives).
+async function mapPool<T>(items: string[], limit: number, fn: (item: string) => Promise<T>): Promise<T[]> {
+  const out: T[] = new Array(items.length)
+  let cursor = 0
+  const worker = async () => {
+    while (cursor < items.length) {
+      const i = cursor++
+      out[i] = await fn(items[i])
+    }
+  }
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, worker))
+  return out
+}
+
 // Fetches the bare find page plus one `&keywords=<topic>` page per
-// TOPIC_KEYWORDS, merging their Apollo caches (later fetches can't clobber an
-// already-seen Event's fuller entry, but in practice each id's shape is
-// identical wherever it surfaces) before reducing to events once. Sequential,
-// like culturemap.ts's day-page sweep, rather than parallel — this is a
-// background daily crawl, not a user-facing request, so there's no latency
-// pressure to justify hammering meetup.com with N concurrent requests.
+// TOPIC_KEYWORDS with bounded concurrency, then merges their Apollo caches
+// (merge order is immaterial — each id's entry is identical wherever it
+// surfaces) before reducing to events once.
 export async function fetchMeetupEvents(url: string, source: string): Promise<RawEvent[]> {
   const urls = [url, ...TOPIC_KEYWORDS.map(topic => keywordUrl(url, topic)).filter((u): u is string => u !== null)]
 
+  const states = await mapPool(urls, FETCH_CONCURRENCY, fetchApolloState)
+
   const merged: ApolloState = {}
-  for (const pageUrl of urls) {
-    const state = await fetchApolloState(pageUrl)
+  for (const state of states) {
     if (state) Object.assign(merged, state)
   }
 
