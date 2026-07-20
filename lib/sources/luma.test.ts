@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { eventsFromEntries, slugFromUrl, placeApiIdFromNextData, stateFromAddress } from './luma'
+import { eventsFromEntries, stateFromAddress, buildPageUrl } from './luma'
 
 function entry(overrides: Record<string, unknown> = {}, ticketOverrides: Record<string, unknown> | null = {}) {
   return {
@@ -18,46 +18,20 @@ function entry(overrides: Record<string, unknown> = {}, ticketOverrides: Record<
   }
 }
 
-describe('slugFromUrl', () => {
-  it('extracts the last path segment', () => {
-    expect(slugFromUrl('https://luma.com/austin')).toBe('austin')
+describe('buildPageUrl', () => {
+  it('pins geo with full-name latitude/longitude params', () => {
+    const u = new URL(buildPageUrl(30.2672, -97.7431, null))
+    expect(u.origin + u.pathname).toBe('https://api.lu.ma/discover/get-paginated-events')
+    expect(u.searchParams.get('latitude')).toBe('30.2672')
+    expect(u.searchParams.get('longitude')).toBe('-97.7431')
+    // Short forms are ignored by Luma, so we must not emit them.
+    expect(u.searchParams.get('lat')).toBeNull()
+    expect(u.searchParams.get('lng')).toBeNull()
   })
 
-  it('handles a trailing slash', () => {
-    expect(slugFromUrl('https://luma.com/austin/')).toBe('austin')
-  })
-
-  it('returns null for a path-less URL', () => {
-    expect(slugFromUrl('https://luma.com/')).toBeNull()
-  })
-
-  it('returns null for an unparseable URL', () => {
-    expect(slugFromUrl('not a url')).toBeNull()
-  })
-})
-
-describe('placeApiIdFromNextData', () => {
-  function nextData(placeOverrides: Record<string, unknown> | undefined) {
-    return { props: { pageProps: { initialData: { data: placeOverrides === undefined ? {} : { place: placeOverrides } } } } }
-  }
-
-  it('extracts place.api_id from the discover page payload', () => {
-    expect(placeApiIdFromNextData(nextData({ api_id: 'discplace-abc123' }))).toBe('discplace-abc123')
-  })
-
-  it('returns null when place is missing', () => {
-    expect(placeApiIdFromNextData(nextData(undefined))).toBeNull()
-  })
-
-  it('returns null when api_id is not a string', () => {
-    expect(placeApiIdFromNextData(nextData({ api_id: 12345 }))).toBeNull()
-  })
-
-  it('returns null for a malformed payload', () => {
-    expect(placeApiIdFromNextData(null)).toBeNull()
-    expect(placeApiIdFromNextData(undefined)).toBeNull()
-    expect(placeApiIdFromNextData('not an object')).toBeNull()
-    expect(placeApiIdFromNextData({})).toBeNull()
+  it('omits the cursor on the first page and includes it on later pages', () => {
+    expect(new URL(buildPageUrl(30.2672, -97.7431, null)).searchParams.get('pagination_cursor')).toBeNull()
+    expect(new URL(buildPageUrl(30.2672, -97.7431, 'CUR123')).searchParams.get('pagination_cursor')).toBe('CUR123')
   })
 })
 
