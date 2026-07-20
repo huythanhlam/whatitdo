@@ -10,7 +10,7 @@ export const maxDuration = 300
 
 function contextFor(source: SourceRow, city: City): SourceContext {
   return {
-    city: { id: city.id, slug: city.slug, name: city.name, state: city.state },
+    city: { id: city.id, slug: city.slug, name: city.name, state: city.state, lat: city.lat, lng: city.lng },
     since: new Date(),
     logger: {
       log: (...a) => console.log(`[${city.slug}/${source.name}]`, ...a),

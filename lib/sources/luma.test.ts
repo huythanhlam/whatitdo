@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { eventsFromEntries, slugFromUrl, placeApiIdFromNextData } from './luma'
+import { eventsFromEntries, stateFromAddress, buildPageUrl } from './luma'
 
 function entry(overrides: Record<string, unknown> = {}, ticketOverrides: Record<string, unknown> | null = {}) {
   return {
@@ -18,46 +18,50 @@ function entry(overrides: Record<string, unknown> = {}, ticketOverrides: Record<
   }
 }
 
-describe('slugFromUrl', () => {
-  it('extracts the last path segment', () => {
-    expect(slugFromUrl('https://luma.com/austin')).toBe('austin')
+describe('buildPageUrl', () => {
+  it('pins geo with full-name latitude/longitude params', () => {
+    const u = new URL(buildPageUrl(30.2672, -97.7431, null))
+    expect(u.origin + u.pathname).toBe('https://api.lu.ma/discover/get-paginated-events')
+    expect(u.searchParams.get('latitude')).toBe('30.2672')
+    expect(u.searchParams.get('longitude')).toBe('-97.7431')
+    // Short forms are ignored by Luma, so we must not emit them.
+    expect(u.searchParams.get('lat')).toBeNull()
+    expect(u.searchParams.get('lng')).toBeNull()
   })
 
-  it('handles a trailing slash', () => {
-    expect(slugFromUrl('https://luma.com/austin/')).toBe('austin')
-  })
-
-  it('returns null for a path-less URL', () => {
-    expect(slugFromUrl('https://luma.com/')).toBeNull()
-  })
-
-  it('returns null for an unparseable URL', () => {
-    expect(slugFromUrl('not a url')).toBeNull()
+  it('omits the cursor on the first page and includes it on later pages', () => {
+    expect(new URL(buildPageUrl(30.2672, -97.7431, null)).searchParams.get('pagination_cursor')).toBeNull()
+    expect(new URL(buildPageUrl(30.2672, -97.7431, 'CUR123')).searchParams.get('pagination_cursor')).toBe('CUR123')
   })
 })
 
-describe('placeApiIdFromNextData', () => {
-  function nextData(placeOverrides: Record<string, unknown> | undefined) {
-    return { props: { pageProps: { initialData: { data: placeOverrides === undefined ? {} : { place: placeOverrides } } } } }
-  }
-
-  it('extracts place.api_id from the discover page payload', () => {
-    expect(placeApiIdFromNextData(nextData({ api_id: 'discplace-abc123' }))).toBe('discplace-abc123')
+describe('stateFromAddress', () => {
+  it('resolves a trailing two-letter code', () => {
+    expect(stateFromAddress('701 Brazos St, Austin, TX 78701, USA')).toBe('TX')
   })
 
-  it('returns null when place is missing', () => {
-    expect(placeApiIdFromNextData(nextData(undefined))).toBeNull()
+  it('resolves Washington, DC via the two-letter code', () => {
+    expect(stateFromAddress('Pubkey, 410 7th St NW, Washington, DC 20004, USA')).toBe('DC')
   })
 
-  it('returns null when api_id is not a string', () => {
-    expect(placeApiIdFromNextData(nextData({ api_id: 12345 }))).toBeNull()
+  it('resolves a spelled-out state name', () => {
+    expect(stateFromAddress('Arlington, Virginia')).toBe('VA')
+    expect(stateFromAddress('Laurel, Maryland')).toBe('MD')
   })
 
-  it('returns null for a malformed payload', () => {
-    expect(placeApiIdFromNextData(null)).toBeNull()
-    expect(placeApiIdFromNextData(undefined)).toBeNull()
-    expect(placeApiIdFromNextData('not an object')).toBeNull()
-    expect(placeApiIdFromNextData({})).toBeNull()
+  it('resolves a spelled-out state name with a trailing zip and country', () => {
+    expect(stateFromAddress('123 Main St, Fairfax, Virginia 22033, USA')).toBe('VA')
+  })
+
+  it('prefers a two-letter code over a spelled-out name when both are present', () => {
+    // A city literally named after a state should not shadow the real code.
+    expect(stateFromAddress('Austin, TX')).toBe('TX')
+  })
+
+  it('returns null for an address with no resolvable state', () => {
+    expect(stateFromAddress('Online')).toBeNull()
+    expect(stateFromAddress(null)).toBeNull()
+    expect(stateFromAddress('Somewhere unlabeled')).toBeNull()
   })
 })
 
