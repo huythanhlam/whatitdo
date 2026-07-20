@@ -1,4 +1,6 @@
 import type { RawEvent } from './types'
+import { mapPool } from '@/lib/gemini'
+import { nextPageUrl } from './pagination'
 
 // Generic schema.org Event scraper for pages that publish structured data
 // directly — no Gemini required, so it's free and exact where it applies.
@@ -13,7 +15,15 @@ const UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 
-const MAX_DETAIL_PAGES = 30
+// Two-level (ItemList index → detail pages) crawl bounds. The index paginates
+// (?page=N) and is NOT date-sorted, so far-future events can sit on any page;
+// to reach ~2 months out we walk the whole index (austintexas.gov's is ~14
+// pages / ~140 events, live-verified), following rel="next" until it runs out.
+// The caps are generous safety bounds (fetched with bounded concurrency) so a
+// much larger index still can't blow the ingest route's time budget.
+const MAX_INDEX_PAGES = 20
+const MAX_DETAIL_PAGES = 250
+const DETAIL_FETCH_CONCURRENCY = 10
 
 type LdAddress = { streetAddress?: string; addressLocality?: string; addressRegion?: string }
 type LdImage = string | { url?: string } | Array<string | { url?: string }>
@@ -157,7 +167,7 @@ export function eventsFromHtml(html: string, source: string, fallbackUrl: string
   return out
 }
 
-async function fetchHtml(url: string, timeoutMs: number): Promise<string | null> {
+export async function fetchHtml(url: string, timeoutMs: number): Promise<string | null> {
   try {
     const res = await fetch(url, {
       headers: { 'User-Agent': UA, Accept: 'text/html' },
@@ -179,13 +189,25 @@ export async function fetchJsonLdEvents(url: string, source: string): Promise<Ra
   const out = eventsFromHtml(html, source, url)
   if (out.length > 0) return out
 
-  // No events on the index page itself — follow its ItemList of detail-page
-  // URLs (capped, so a 100+ item index can't blow the run's time budget).
-  const { urls } = parseBlocks(html)
-  if (urls.size === 0) return []
+  // No events on the index page itself — the two-level case (e.g.
+  // austintexas.gov's Drupal events index): a paginated ItemList of detail-page
+  // URLs (?page=N, advertised via rel="next"), with the actual Event JSON-LD on
+  // each detail page. Walk the index's own pagination to gather detail URLs
+  // across pages. The index is not date-sorted and exposes no dates until the
+  // detail page, so the 2-month lookahead is covered by breadth (more index
+  // pages = more events, including the near-2-month ones), bounded by the caps.
+  const detailUrls = new Set<string>()
+  let indexUrl: string | null = url
+  for (let page = 0; page < MAX_INDEX_PAGES && indexUrl && detailUrls.size < MAX_DETAIL_PAGES; page++) {
+    const indexHtml: string | null = page === 0 ? html : await fetchHtml(indexUrl, 20000)
+    if (!indexHtml) break
+    for (const u of parseBlocks(indexHtml).urls) detailUrls.add(u)
+    indexUrl = nextPageUrl(indexHtml, indexUrl)
+  }
+  if (detailUrls.size === 0) return out
 
-  const detailUrls = [...urls].slice(0, MAX_DETAIL_PAGES)
-  const pages = await Promise.all(detailUrls.map(u => fetchHtml(u, 15000)))
+  const capped = [...detailUrls].slice(0, MAX_DETAIL_PAGES)
+  const pages = await mapPool(capped, DETAIL_FETCH_CONCURRENCY, u => fetchHtml(u, 15000))
   const seen = new Set<string>()
   for (const detailHtml of pages) {
     if (!detailHtml) continue

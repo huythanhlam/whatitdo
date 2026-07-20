@@ -1,6 +1,7 @@
 import * as cheerio from 'cheerio'
 import type { RawEvent } from './types'
-import { TZ, partsInTz, zonedToUtc } from '@/lib/dateRanges'
+import { TZ, partsInTz, zonedToUtc, LOOKAHEAD_DAYS } from '@/lib/dateRanges'
+import { mapPool } from '@/lib/gemini'
 
 // austin.culturemap.com/events/ is a day-at-a-time listing (?tags=YYYYMMDD,
 // defaulting to today when the param is absent) — confirmed real, static,
@@ -20,9 +21,12 @@ const UA =
 // One row per (event, day actually listed) rather than one row per
 // recurring series — matches what the site itself shows on each day's page,
 // and sidesteps guessing which of an event's many occurrence dates is its
-// canonical start. Bounded like every other fan-out fetch in this dir
-// (MAX_DETAIL_PAGES=30 in jsonld-events.ts, MAX_EVENTS=500 in simpleview.ts).
-const DAYS_AHEAD = 14
+// canonical start. Sweeps a rolling 2-month window (LOOKAHEAD_DAYS) so the
+// feed stays current up to ~2 months out on every run; that's one HTTP request
+// per day, so the days are fetched with bounded concurrency to stay well
+// within the ingest route's maxDuration.
+const DAYS_AHEAD = LOOKAHEAD_DAYS
+const DAY_FETCH_CONCURRENCY = 8
 const DEFAULT_HOUR = 19 // matches lib/extractor.ts's "date only -> 19:00 local" convention
 
 type DayParts = { y: number; m: number; d: number }
@@ -127,21 +131,24 @@ async function fetchDay(baseUrl: string, dateTag: string): Promise<string | null
 
 export async function fetchCultureMapEvents(baseUrl: string, source: string): Promise<RawEvent[]> {
   const today = partsInTz(new Date(), TZ)
+  const days = Array.from({ length: DAYS_AHEAD }, (_, i) => addDays(today, i))
+
+  // Fetch the whole window concurrently (bounded), preserving day order in the
+  // results so the dedupe below keeps the earliest listing of a repeated event.
+  const htmls = await mapPool(days, DAY_FETCH_CONCURRENCY, day => fetchDay(baseUrl, tagOf(day)))
+
   const out: RawEvent[] = []
   const seen = new Set<string>()
-
-  for (let i = 0; i < DAYS_AHEAD; i++) {
-    const day = addDays(today, i)
-    const dateTag = tagOf(day)
-    const html = await fetchDay(baseUrl, dateTag)
-    if (!html) continue
-    for (const raw of eventsFromHtml(html, source, dateTag, day)) {
+  days.forEach((day, i) => {
+    const html = htmls[i]
+    if (!html) return
+    for (const raw of eventsFromHtml(html, source, tagOf(day), day)) {
       if (!seen.has(raw.source_id)) {
         seen.add(raw.source_id)
         out.push(raw)
       }
     }
-  }
+  })
 
   return out
 }

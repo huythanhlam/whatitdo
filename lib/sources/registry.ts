@@ -12,6 +12,7 @@ import { fetchJsonLdEvents } from './jsonld-events'
 import { fetchPartifulEvents } from './partiful'
 import { fetchSimpleviewEvents } from './simpleview'
 import { fetchCultureMapEvents } from './culturemap'
+import { fetchTribeEvents } from './tribe-events'
 import { fetchMeetupEvents } from './meetup'
 import { fetchLumaEvents } from './luma'
 import { fetchMeanwhileEvents } from './meanwhile'
@@ -58,9 +59,15 @@ export const PARSERS: Record<string, SourceParser> = {
   bluesky: simple(hasGeminiKey, () => fetchBlueskyEvents()),
 
   // Structured schema.org Event pages — no Gemini, exact and free where the
-  // site publishes it (thelongcenter.org, 365thingsaustin.com,
-  // austintexas.gov's per-event pages).
+  // site publishes it (thelongcenter.org, austintexas.gov's per-event pages).
   'events-jsonld': simple(() => true, (url, name) => fetchJsonLdEvents(url!, name)),
+
+  // 365thingsaustin.com — same schema.org Event JSON-LD as 'events-jsonld',
+  // but on a Tribe "The Events Calendar" list view that paginates
+  // (/events/list/page/N/); this follows that pagination to cover the 2-month
+  // lookahead window instead of reading only the first page. `url` is the
+  // list-view URL.
+  'tribe-events': simple(() => true, (url, name) => fetchTribeEvents(url!, name)),
 
   // Partiful's Next.js __NEXT_DATA__ payload — likewise structured, no Gemini.
   partiful: simple(() => true, (url, name) => fetchPartifulEvents(url!, name)),
