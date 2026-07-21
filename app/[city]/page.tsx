@@ -1,6 +1,7 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import type { Metadata } from 'next'
 import { MapPin, ArrowRight } from 'lucide-react'
 import { SearchBar } from '@/components/SearchBar'
 import { SidebarFilters } from '@/components/SidebarFilters'
@@ -25,6 +26,7 @@ import { gridRangeIso, currentCentralMonth } from '@/lib/calendar'
 import { DateFilter } from '@/components/DateFilter'
 import { SEO_PAGES } from '@/lib/seoPages'
 import { isRecsCity } from '@/lib/recs/config'
+import { eventListJsonLd, jsonLdHtml } from '@/lib/jsonLd'
 import type { EnrichedEvent } from '@/lib/types'
 
 // Rendered per request: the layout depends on whether the visitor is signed in
@@ -32,6 +34,29 @@ import type { EnrichedEvent } from '@/lib/types'
 // + suggested + the full list), which is read from the Supabase session server-
 // side, so this page can't be statically cached.
 export const dynamic = 'force-dynamic'
+
+// The flagship page for "<city> events" search intent. The parent
+// app/[city]/layout.tsx already sets a per-city title/description/OG; here we
+// (a) pin the self-referencing canonical so query-param variants
+// (?view=/?category=/?when=…) all consolidate to the clean /<city> URL instead
+// of diluting ranking, and (b) tighten the home title/description with the
+// primary keyword. openGraph/twitter are intentionally left to the layout so
+// the city OG image (og-austin.png) is preserved.
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ city: string }>
+}): Promise<Metadata> {
+  const { city: citySlug } = await params
+  const city = await requireCity(citySlug)
+  return {
+    title: {
+      absolute: `${city.name} Events — Concerts, Live Music & Things To Do | Whats Happenin`,
+    },
+    description: `Find things to do in ${city.name}, ${city.state}: browse concerts, live music, festivals, comedy, food & drink, and free events — aggregated daily and searchable by date and category.`,
+    alternates: { canonical: `/${citySlug}` },
+  }
+}
 
 function first(v: string | string[] | undefined): string | undefined {
   return typeof v === 'string' ? v : Array.isArray(v) ? v[0] : undefined
@@ -188,6 +213,14 @@ export default async function CityHomePage({
   const base = `/${city.slug}`
   const sources = await getDistinctSources(city.id)
 
+  // ItemList of the soonest upcoming events so Google reads the home page as a
+  // collection of events (event carousel eligibility) — not just each detail
+  // page. A small dedicated read; the grid below paginates its own results.
+  const jsonLdEvents = await listEvents({ cityId: city.id, limit: 15, offset: 0 })
+  const listJsonLd = jsonLdEvents.length
+    ? jsonLdHtml(eventListJsonLd(jsonLdEvents as unknown as EnrichedEvent[], city.slug, city))
+    : null
+
   // Signed-in visitors get the personalized layout; the catalog is Austin-only
   // for recs, so other cities keep the classic category + list experience.
   const { user } = await getUser()
@@ -204,6 +237,9 @@ export default async function CityHomePage({
 
   return (
     <div className="min-h-screen bg-background">
+      {listJsonLd && (
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: listJsonLd }} />
+      )}
       <HeaderHeightSync />
       {/* Neutral dark-gray in dark mode (not the teal-tinted card color). */}
       <header className="border-b border-border sticky top-0 z-40 bg-card/95 dark:bg-ink-800/95 backdrop-blur-sm">
@@ -262,7 +298,7 @@ export default async function CityHomePage({
               <MapPin className="w-3.5 h-3.5" /> {city.name}, {city.state}
             </p>
             <h1 className="font-display text-4xl sm:text-5xl lg:text-[3.4rem] font-semibold leading-[1.05] text-foreground text-balance">
-              Find your next favorite thing to do
+              {city.name} events: find your next favorite thing to do
             </h1>
             <p className="mt-4 text-base sm:text-lg text-muted-foreground max-w-md text-balance">
               Concerts, festivals, comedy, food &amp; drink, arts, and more — aggregated daily across {city.name}.
