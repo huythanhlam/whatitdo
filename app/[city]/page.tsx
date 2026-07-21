@@ -244,10 +244,13 @@ export default async function CityHomePage({
       {/* Neutral dark-gray in dark mode (not the teal-tinted card color). */}
       <header className="border-b border-border sticky top-0 z-40 bg-card/95 dark:bg-ink-800/95 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3">
-          {/* Logo — left. Wordmark set in the repo display font (Unbounded). */}
-          <Link href={base} aria-label="Whats Happenin" className="flex items-center gap-2 shrink-0">
-            <Image src="/logo-icon.svg" alt="" aria-hidden="true" width={36} height={36} className="h-9 w-9 rounded-xl" priority />
-            <span className="font-display text-lg sm:text-xl font-semibold tracking-tight text-foreground whitespace-nowrap">
+          {/* Logo — left. Wordmark set in the repo display font (Unbounded).
+              The icon never shrinks, but the wordmark can (min-w-0 + truncate) so
+              the logo and the action cluster stay on one row on mobile instead of
+              the actions wrapping to a second, right-aligned line. */}
+          <Link href={base} aria-label="Whats Happenin" className="flex items-center gap-2 min-w-0">
+            <Image src="/logo-icon.svg" alt="" aria-hidden="true" width={36} height={36} className="h-9 w-9 rounded-xl shrink-0" priority />
+            <span className="font-display text-base sm:text-xl font-semibold tracking-tight text-foreground truncate">
               Whats Happenin
             </span>
           </Link>
@@ -258,7 +261,7 @@ export default async function CityHomePage({
             </Suspense>
           </div>
           {/* Right cluster — pushed to the right edge, leaving empty space to its left. */}
-          <div className="order-2 sm:order-none ml-auto flex items-center gap-3 sm:gap-4">
+          <div className="order-2 sm:order-none ml-auto flex items-center gap-2 sm:gap-4 shrink-0">
             <Link
               href={`${base}/submit`}
               className="hidden sm:inline shrink-0 text-sm text-muted-foreground hover:text-primary font-medium"
