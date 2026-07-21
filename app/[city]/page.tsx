@@ -208,39 +208,49 @@ export default async function CityHomePage({
       {/* Neutral dark-gray in dark mode (not the teal-tinted card color). */}
       <header className="border-b border-border sticky top-0 z-40 bg-card/95 dark:bg-ink-800/95 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3">
-          {/* Logo — left. Wordmark set in the repo display font (Unbounded).
-              The icon never shrinks, but the wordmark can (min-w-0 + truncate) so
-              the logo and the action cluster stay on one row on mobile instead of
-              the actions wrapping to a second, right-aligned line. */}
-          <Link href={base} aria-label="Whats Happenin" className="flex items-center gap-2 min-w-0">
-            <Image src="/logo-icon.svg" alt="" aria-hidden="true" width={36} height={36} className="h-9 w-9 rounded-xl shrink-0" priority />
-            <span className="font-display text-base sm:text-xl font-semibold tracking-tight text-foreground truncate">
-              Whats Happenin
-            </span>
-          </Link>
-          {/* Search — reduced width; wraps to its own full-width row on mobile. */}
-          <div className="order-3 w-full sm:order-none sm:w-56 md:w-72">
+          {/* Logo + actions share one fixed row on mobile. This wrapper is a
+              single-line (non-wrapping) flex bar so the two can never break onto
+              separate lines — the failure mode when the AuthNav avatar and the
+              Unbounded webfont finish loading and nudge the total width past the
+              viewport. `sm:contents` dissolves the wrapper on desktop so the logo,
+              search, and action cluster lay out as siblings in one row again. */}
+          <div className="order-1 flex w-full min-w-0 items-center gap-2 sm:contents">
+            {/* Logo — left. Wordmark set in the repo display font (Unbounded). The
+                icon never shrinks; the wordmark can (min-w-0 + truncate) so it
+                gives way gracefully rather than forcing a wrap. Sized down a step
+                on mobile (text-sm) so the full brand name fits alongside the CTA
+                and avatar on typical phone widths; text-xl restored from sm up. */}
+            <Link href={base} aria-label="Whats Happenin" className="mr-auto flex min-w-0 items-center gap-2 sm:mr-0 sm:order-1">
+              <Image src="/logo-icon.svg" alt="" aria-hidden="true" width={36} height={36} className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl shrink-0" priority />
+              <span className="font-display text-sm sm:text-xl font-semibold tracking-tight text-foreground truncate">
+                Whats Happenin
+              </span>
+            </Link>
+            {/* Action cluster — hugs the right edge. */}
+            <div className="flex items-center gap-2 sm:gap-4 shrink-0 sm:order-3 sm:ml-auto">
+              <Link
+                href={`${base}/submit`}
+                className="hidden sm:inline shrink-0 text-sm text-muted-foreground hover:text-primary font-medium"
+              >
+                Submit an event
+              </Link>
+              <Link
+                href={`${base}/subscribe`}
+                className="shrink-0 text-sm bg-primary text-primary-foreground px-3 py-2 sm:px-4 rounded-full hover:bg-primary/90 transition-colors font-semibold"
+              >
+                Get Updates
+              </Link>
+              {/* Auth-aware, Austin-only at launch. Client island so the ISR-cached
+                  header HTML stays impersonal (see components/AuthNav.tsx). */}
+              {isRecsCity(citySlug) && <AuthNav />}
+            </div>
+          </div>
+          {/* Search — own full-width row on mobile; fixed-width inline between the
+              logo and actions on desktop. */}
+          <div className="order-2 w-full sm:order-2 sm:w-56 md:w-72">
             <Suspense fallback={<div className="h-9 bg-muted rounded-md animate-pulse" />}>
               <SearchBar />
             </Suspense>
-          </div>
-          {/* Right cluster — pushed to the right edge, leaving empty space to its left. */}
-          <div className="order-2 sm:order-none ml-auto flex items-center gap-2 sm:gap-4 shrink-0">
-            <Link
-              href={`${base}/submit`}
-              className="hidden sm:inline shrink-0 text-sm text-muted-foreground hover:text-primary font-medium"
-            >
-              Submit an event
-            </Link>
-            <Link
-              href={`${base}/subscribe`}
-              className="shrink-0 text-sm bg-primary text-primary-foreground px-3.5 py-2 sm:px-4 rounded-full hover:bg-primary/90 transition-colors font-semibold"
-            >
-              Get Updates
-            </Link>
-            {/* Auth-aware, Austin-only at launch. Client island so the ISR-cached
-                header HTML stays impersonal (see components/AuthNav.tsx). */}
-            {isRecsCity(citySlug) && <AuthNav />}
           </div>
         </div>
       </header>
