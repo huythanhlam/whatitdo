@@ -2,7 +2,10 @@ import type { RawEvent } from './types'
 
 // luma.com/<city-slug> (e.g. luma.com/austin) is a Next.js discover page
 // whose own frontend calls a public, unauthenticated JSON endpoint
-// (api.lu.ma/discover/get-paginated-events) to fetch/paginate results.
+// (/discover/get-paginated-events) to fetch/paginate results. Luma's frontend
+// hits the api.lu.ma host, but we hit the equivalent api.luma.com host, which
+// serves the identical feed and — unlike api.lu.ma — is reachable from our
+// iad1 cron datacenter (see buildPageUrl for the full rationale).
 //
 // Geo is pinned by `latitude`/`longitude` query params — and ONLY by those.
 // Live-verified: the endpoint otherwise geo-locates by the caller's IP and
@@ -29,8 +32,13 @@ const UA =
 
 // Safety cap on cursor-following, mirroring paginated-crawl.ts's max_pages
 // guard — Austin's full sweep is 3 pages (~120 events), but this keeps a much
-// larger city from looping unbounded.
-const MAX_PAGES = 20
+// larger city from looping unbounded. Bounded together with PAGE_TIMEOUT_MS so
+// the absolute worst case (MAX_PAGES * PAGE_TIMEOUT_MS = 100s) stays well under
+// the ingest route's 300s maxDuration that this source shares with ~50 others:
+// a slow/hanging Luma must fail this source cleanly, never run past the wall
+// clock and orphan the whole invocation's source_run at 'running'.
+const MAX_PAGES = 10
+const PAGE_TIMEOUT_MS = 10000
 
 type LumaPrice = { cents?: unknown; currency?: unknown }
 type LumaTicketInfo = { price?: LumaPrice | null; is_free?: unknown }
@@ -194,7 +202,13 @@ export function eventsFromEntries(entries: unknown, source: string, targetState?
 // names only — Luma silently ignores the `lat`/`lng` short forms and otherwise
 // geo-locates by the caller's IP).
 export function buildPageUrl(lat: number, lng: number, cursor: string | null): string {
-  const u = new URL('https://api.lu.ma/discover/get-paginated-events')
+  // Host is api.luma.com, NOT api.lu.ma. Both serve the identical discover
+  // JSON from a residential IP, but from our iad1 cron datacenter api.lu.ma
+  // hangs (cloud-IP throttling) — each page stalled until the crawl blew past
+  // the route's 300s maxDuration, orphaning the source_run at 'running' and
+  // persisting nothing. api.luma.com is reachable and fast from iad1: it is
+  // the same host the healthy crawl:luma-ics-austin source hits every day.
+  const u = new URL('https://api.luma.com/discover/get-paginated-events')
   u.searchParams.set('latitude', String(lat))
   u.searchParams.set('longitude', String(lng))
   if (cursor) u.searchParams.set('pagination_cursor', cursor)
@@ -205,7 +219,7 @@ async function fetchPage(lat: number, lng: number, cursor: string | null): Promi
   try {
     const res = await fetch(buildPageUrl(lat, lng, cursor), {
       headers: { 'User-Agent': UA, Accept: 'application/json' },
-      signal: AbortSignal.timeout(20000),
+      signal: AbortSignal.timeout(PAGE_TIMEOUT_MS),
       cache: 'no-store',
     })
     if (!res.ok) return null

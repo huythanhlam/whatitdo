@@ -19,9 +19,13 @@ function entry(overrides: Record<string, unknown> = {}, ticketOverrides: Record<
 }
 
 describe('buildPageUrl', () => {
-  it('pins geo with full-name latitude/longitude params', () => {
+  it('pins geo with full-name latitude/longitude params on the api.luma.com host', () => {
     const u = new URL(buildPageUrl(30.2672, -97.7431, null))
-    expect(u.origin + u.pathname).toBe('https://api.lu.ma/discover/get-paginated-events')
+    // Must be api.luma.com, NOT api.lu.ma: the latter is unreachable from our
+    // iad1 cron datacenter (it hung past maxDuration, orphaning the run at
+    // 'running'), while api.luma.com serves the identical feed and is the host
+    // the working ICS source already uses from that same region.
+    expect(u.origin + u.pathname).toBe('https://api.luma.com/discover/get-paginated-events')
     expect(u.searchParams.get('latitude')).toBe('30.2672')
     expect(u.searchParams.get('longitude')).toBe('-97.7431')
     // Short forms are ignored by Luma, so we must not emit them.
