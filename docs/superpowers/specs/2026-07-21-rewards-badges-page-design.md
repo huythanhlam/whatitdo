@@ -47,9 +47,9 @@ New server component at `app/rewards/page.tsx`:
 ## Page layout
 
 1. **Sticky header** — matches `app/account/page.tsx`'s shell.
-   - Logo: `/logo-badge-atx.svg` (the Austin badge mark — chosen deliberately for
-     the badges page) rendered with Next `<Image>`, same `<Link>` + wordmark
-     pattern as `app/[city]/page.tsx:212-217`.
+   - Logo: `/logo-icon.svg` (the site's standard mark, matching every other
+     header) rendered with Next `<Image>`, same `<Link>` + wordmark pattern as
+     `app/[city]/page.tsx:212-217`.
    - "← Back to events" link to `/austin` and a link to `/account`.
 2. **Intro** — `h1` "Badges & Rewards" + one-line explainer.
 3. **Levels section** — the 5 levels (`Newcomer → Local Legend`) as `MedalFrame`
