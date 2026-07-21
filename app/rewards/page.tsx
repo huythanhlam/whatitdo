@@ -6,7 +6,7 @@ import { getRewardsSummary, emptySummary, type RewardsSummary } from '@/lib/rewa
 import { BADGES, LEVELS, GROUP_LABELS, GROUP_ORDER } from '@/lib/rewards/catalog'
 import { MedalFrame } from '@/components/rewards/MedalFrame'
 import { Tooltip } from '@/components/rewards/Tooltip'
-import { BadgeCard } from '@/components/rewards/BadgeCard'
+import { BadgeDetailCard } from '@/components/rewards/BadgeDetailCard'
 
 // The public badges & rewards catalog. Reads the session so signed-in users see
 // which badges they've earned and their level progress, but it is strictly
@@ -55,7 +55,7 @@ export default async function RewardsPage() {
         <h1 className="font-display text-2xl font-semibold mb-2">Badges &amp; Rewards</h1>
         <p className="text-sm text-muted-foreground mb-8">
           Earn badges by going out, saving events, and coming back — points add up to your level.
-          Hover any badge to see how to unlock it.
+          Each badge below shows exactly how to unlock it.
         </p>
 
         {signedIn && (
@@ -120,9 +120,9 @@ export default async function RewardsPage() {
               return (
                 <div key={group}>
                   <h3 className="text-sm font-medium mb-3">{GROUP_LABELS[group]}</h3>
-                  <div className="grid grid-cols-3 gap-x-2 gap-y-6 sm:grid-cols-4 md:grid-cols-6">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     {badges.map(b => (
-                      <BadgeCard key={b.id} badge={b} earned={earned.has(b.id)} />
+                      <BadgeDetailCard key={b.id} badge={b} earned={earned.has(b.id)} />
                     ))}
                   </div>
                 </div>
