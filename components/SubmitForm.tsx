@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { trackEvent } from '@/lib/analytics'
 
 export function SubmitForm() {
   const { city } = useParams<{ city: string }>()
@@ -26,6 +27,8 @@ export function SubmitForm() {
         setStatus('error')
         return
       }
+      // Community event submission completed.
+      trackEvent('submit_event', { city })
       setMessage(data.note ?? 'Submitted!')
       setStatus('success')
     } catch {

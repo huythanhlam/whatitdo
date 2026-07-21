@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { CATEGORIES } from '@/lib/categories'
+import { trackEvent } from '@/lib/analytics'
 
 export function SubscribeForm({ neighborhoods = [] }: { neighborhoods?: string[] }) {
   const { city } = useParams<{ city: string }>()
@@ -36,7 +37,13 @@ export function SubscribeForm({ neighborhoods = [] }: { neighborhoods?: string[]
           free_only: freeOnly, neighborhoods: selectedNeighborhoods,
         }),
       })
-      setStatus(res.ok ? 'success' : 'error')
+      if (res.ok) {
+        // Primary lead conversion — the email digest signup.
+        trackEvent('generate_lead', { method: 'email_digest', city, frequency })
+        setStatus('success')
+      } else {
+        setStatus('error')
+      }
     } catch {
       setStatus('error')
     }
