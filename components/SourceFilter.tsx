@@ -21,13 +21,15 @@ export function SourceFilter({ sources, compact = false }: { sources: string[]; 
       [...existing, value].forEach(s => params.append('source', s))
     }
     params.delete('page')
-    router.push(`${pathname}?${params.toString()}`)
+    // scroll: false keeps the viewport where it is — toggling a filter should
+    // not yank the user back to the top of the page.
+    router.push(`${pathname}?${params.toString()}`, { scroll: false })
   }
 
   function clearAll() {
     const params = new URLSearchParams(searchParams.toString())
     params.delete('source')
-    router.push(`${pathname}?${params.toString()}`)
+    router.push(`${pathname}?${params.toString()}`, { scroll: false })
   }
 
   if (sources.length === 0) return null

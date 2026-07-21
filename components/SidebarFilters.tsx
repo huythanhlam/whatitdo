@@ -22,13 +22,13 @@ export function SidebarFilters({ compact = false }: { compact?: boolean }) {
       [...existing, slug].forEach(s => params.append('category', s))
     }
     params.delete('page')
-    router.push(`${pathname}?${params.toString()}`)
+    router.push(`${pathname}?${params.toString()}`, { scroll: false })
   }
 
   function clearAll() {
     const params = new URLSearchParams(searchParams.toString())
     params.delete('category')
-    router.push(`${pathname}?${params.toString()}`)
+    router.push(`${pathname}?${params.toString()}`, { scroll: false })
   }
 
   if (compact) {
