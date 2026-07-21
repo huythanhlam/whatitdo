@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 // Static, city-agnostic legal page. Lives at the app root (not under [city]) so
 // there's a single canonical /privacy URL linked from the global footer.
-const UPDATED = 'July 21, 2026'
+const UPDATED = 'July 22, 2026'
 const INSTAGRAM_URL = 'https://www.instagram.com/whatshappenin.atx/'
 
 export default function PrivacyPage() {
@@ -52,7 +52,8 @@ export default function PrivacyPage() {
               <li>
                 <strong className="font-semibold text-foreground">Activity.</strong> To power
                 recommendations and improve the site, we record actions like saving, hiding, or
-                marking interest in events, and basic usage analytics such as pages viewed.
+                marking interest in events, and usage analytics such as pages viewed, sign-ups, and
+                event submissions.
               </li>
               <li>
                 <strong className="font-semibold text-foreground">Event submissions.</strong> If you
@@ -69,6 +70,27 @@ export default function PrivacyPage() {
               <li>Operate, maintain, secure, and improve the site.</li>
               <li>Review and publish events submitted by the community.</li>
             </ul>
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="font-display text-xl font-semibold text-foreground">Analytics and cookies</h2>
+            <p>
+              We use Google Analytics to understand how visitors find and use the site — for example,
+              which pages are popular and how many people sign up. Google Analytics sets cookies and
+              collects information such as your approximate location, device, and pages visited, and
+              also measures page performance (load speed and responsiveness). This helps us fix slow
+              pages and improve the experience. We do not use this data for advertising. To learn more,
+              see{' '}
+              <a
+                href="https://policies.google.com/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-primary hover:underline"
+              >
+                Google&rsquo;s Privacy Policy
+              </a>
+              .
+            </p>
           </section>
 
           <section className="space-y-3">

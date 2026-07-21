@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { createClient } from '@/lib/supabase/browser'
+import { trackEvent } from '@/lib/analytics'
 
 const MIN_PASSWORD = 8
 
@@ -53,6 +54,9 @@ export function SignUpForm({ redirectTo }: { redirectTo?: string }) {
     if (name && data.user) {
       await supabase.from('profiles').update({ display_name: name }).eq('id', data.user.id)
     }
+    // Account creation conversion. Fired before the full-page nav below so the
+    // beacon is queued while this document is still alive.
+    trackEvent('sign_up', { method: 'password' })
     // Full navigation so the server sees the freshly set session cookie. Carry
     // the CTA destination through onboarding so finish/skip lands there.
     window.location.href = redirect ? `/onboarding?next=${encodeURIComponent(redirect)}` : '/onboarding'
