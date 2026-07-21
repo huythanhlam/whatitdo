@@ -1,22 +1,14 @@
+import Link from 'next/link'
 import { MedalFrame } from './rewards/MedalFrame'
 import { RewardMedal } from './RewardMedal'
-import { BADGES, type BadgeGroup } from '@/lib/rewards/catalog'
+import { BADGES, GROUP_LABELS, GROUP_ORDER } from '@/lib/rewards/catalog'
 import type { RewardsSummary } from '@/lib/rewards/data'
 
 // The account-page rewards section: a level hero with progress to the next level,
 // total points, and the full badge set grouped by theme (earned in color, locked
 // muted so the panel doubles as a "what's next" list). Server component — takes
-// the summary the page already synced.
-
-const GROUP_LABELS: Record<BadgeGroup, string> = {
-  'getting-started': 'Getting started',
-  attendance: 'Attendance',
-  'first-of-type': 'First-timer badges',
-  taste: 'Curation',
-  social: 'Sharing',
-  loyalty: 'Loyalty',
-}
-const GROUP_ORDER: BadgeGroup[] = ['getting-started', 'attendance', 'first-of-type', 'taste', 'social', 'loyalty']
+// the summary the page already synced. Group labels/order are shared with the
+// /rewards catalog page (see lib/rewards/catalog.ts).
 
 export function RewardsPanel({ summary }: { summary: RewardsSummary }) {
   const earned = new Set(summary.earned.map(e => e.id))
@@ -25,7 +17,10 @@ export function RewardsPanel({ summary }: { summary: RewardsSummary }) {
 
   return (
     <section>
-      <h2 className="font-display text-lg font-semibold mb-1">Rewards</h2>
+      <div className="flex items-baseline justify-between gap-3 mb-1">
+        <h2 className="font-display text-lg font-semibold">Rewards</h2>
+        <Link href="/rewards" className="text-sm text-primary hover:underline shrink-0">View all badges →</Link>
+      </div>
       <p className="text-sm text-muted-foreground mb-4">
         Earn badges by going out, saving events, and coming back. Points add up to your level.
       </p>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { BADGES, LEVELS } from './catalog'
+import { BADGES, LEVELS, GROUP_ORDER, GROUP_LABELS } from './catalog'
 import { BADGE_ART_SVG } from './art'
 
 describe('reward catalog invariants', () => {
@@ -33,5 +33,23 @@ describe('reward catalog invariants', () => {
   it('has unique level ids', () => {
     const ids = LEVELS.map(l => l.id)
     expect(new Set(ids).size).toBe(ids.length)
+  })
+
+  // The /rewards catalog page renders badges by walking GROUP_ORDER and labeling
+  // each with GROUP_LABELS. If a new badge lands in a group that isn't ordered or
+  // labeled, it would silently vanish from the page — guard against that here.
+  it('every badge belongs to an ordered, labeled group', () => {
+    for (const b of BADGES) {
+      expect(GROUP_ORDER, b.id).toContain(b.group)
+      expect(GROUP_LABELS[b.group], b.id).toBeTypeOf('string')
+      expect(GROUP_LABELS[b.group].length, b.id).toBeGreaterThan(0)
+    }
+  })
+
+  it('GROUP_ORDER is duplicate-free and every group holds at least one badge', () => {
+    expect(new Set(GROUP_ORDER).size).toBe(GROUP_ORDER.length)
+    for (const g of GROUP_ORDER) {
+      expect(BADGES.some(b => b.group === g), g).toBe(true)
+    }
   })
 })
