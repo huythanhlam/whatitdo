@@ -180,9 +180,11 @@ export function AccountView({
       {/* Rewards */}
       <RewardsPanel summary={rewards} />
 
-      {/* Interested */}
-      <EventList title="Interested" icon={<Star className="w-4 h-4 text-amber-500" />} events={ints} now={now} empty="Nothing marked interesting yet."
-        action={{ label: 'Remove', icon: <X className="w-4 h-4" />, run: removeInterested }} />
+      {/* Interested — id anchors the header avatar menu's "Interested events" link. */}
+      <div id="interested" className="scroll-mt-24">
+        <EventList title="Interested" icon={<Star className="w-4 h-4 text-amber-500" />} events={ints} now={now} empty="Nothing marked interesting yet."
+          action={{ label: 'Remove', icon: <X className="w-4 h-4" />, run: removeInterested }} />
+      </div>
 
       {/* Not interested */}
       <EventList title="Not interested" icon={<X className="w-4 h-4 text-muted-foreground" />} events={hids} now={now} empty="You haven't hidden anything."

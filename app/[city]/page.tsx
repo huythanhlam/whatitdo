@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { MapPin, ArrowRight } from 'lucide-react'
 import { SearchBar } from '@/components/SearchBar'
 import { SidebarFilters } from '@/components/SidebarFilters'
@@ -204,38 +205,39 @@ export default async function CityHomePage({
   return (
     <div className="min-h-screen bg-background">
       <HeaderHeightSync />
-      <header className="border-b border-border sticky top-0 z-40 bg-card/95 backdrop-blur-sm">
+      {/* Neutral dark-gray in dark mode (not the teal-tinted card color). */}
+      <header className="border-b border-border sticky top-0 z-40 bg-card/95 dark:bg-ink-800/95 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3">
-          <Link href={base} className="flex items-center gap-2 shrink-0">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-lg">🎉</span>
+          {/* Logo — left. Wordmark set in the repo display font (Unbounded). */}
+          <Link href={base} aria-label="Whats Happenin" className="flex items-center gap-2 shrink-0">
+            <Image src="/logo-icon.svg" alt="" aria-hidden="true" width={36} height={36} className="h-9 w-9 rounded-xl" priority />
             <span className="font-display text-lg sm:text-xl font-semibold tracking-tight text-foreground whitespace-nowrap">
               Whats Happenin
             </span>
           </Link>
-          <span className="hidden lg:inline-flex items-center gap-1 text-sm font-medium text-muted-foreground border-l border-border pl-4">
-            <MapPin className="w-3.5 h-3.5" /> {city.name}, {city.state}
-          </span>
-          <Link
-            href={`${base}/submit`}
-            className="hidden sm:inline order-4 shrink-0 text-sm text-muted-foreground hover:text-primary font-medium"
-          >
-            Submit an event
-          </Link>
-          <Link
-            href={`${base}/subscribe`}
-            className="order-2 sm:order-5 ml-auto sm:ml-0 shrink-0 text-sm bg-primary text-primary-foreground px-3.5 py-2 sm:px-4 rounded-full hover:bg-primary/90 transition-colors font-semibold"
-          >
-            Get Updates
-          </Link>
-          {/* Auth-aware, Austin-only at launch. Client island so the ISR-cached
-              header HTML stays impersonal (see components/AuthNav.tsx). */}
-          {isRecsCity(citySlug) && <AuthNav />}
-          {/* Full-width on mobile so it wraps to its own row instead of
-              squeezing down to an unusable sliver next to the logo/CTA. */}
-          <div className="order-5 sm:order-3 w-full sm:w-auto sm:flex-1 sm:max-w-xl">
+          {/* Search — reduced width; wraps to its own full-width row on mobile. */}
+          <div className="order-3 w-full sm:order-none sm:w-56 md:w-72">
             <Suspense fallback={<div className="h-9 bg-muted rounded-md animate-pulse" />}>
               <SearchBar />
             </Suspense>
+          </div>
+          {/* Right cluster — pushed to the right edge, leaving empty space to its left. */}
+          <div className="order-2 sm:order-none ml-auto flex items-center gap-3 sm:gap-4">
+            <Link
+              href={`${base}/submit`}
+              className="hidden sm:inline shrink-0 text-sm text-muted-foreground hover:text-primary font-medium"
+            >
+              Submit an event
+            </Link>
+            <Link
+              href={`${base}/subscribe`}
+              className="shrink-0 text-sm bg-primary text-primary-foreground px-3.5 py-2 sm:px-4 rounded-full hover:bg-primary/90 transition-colors font-semibold"
+            >
+              Get Updates
+            </Link>
+            {/* Auth-aware, Austin-only at launch. Client island so the ISR-cached
+                header HTML stays impersonal (see components/AuthNav.tsx). */}
+            {isRecsCity(citySlug) && <AuthNav />}
           </div>
         </div>
       </header>
