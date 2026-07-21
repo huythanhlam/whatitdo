@@ -8,6 +8,7 @@ import { getEvent as fetchEvent, getCityBySlug } from '@/lib/db'
 import { requireCity } from '@/lib/cities'
 import { getTicketProvider } from '@/lib/tickets'
 import { getBaseUrl } from '@/lib/site'
+import { singleEventJsonLd, jsonLdHtml } from '@/lib/jsonLd'
 import { cn } from '@/lib/utils'
 import { isRecsCity } from '@/lib/recs/config'
 import { TrackBeacon } from '@/components/TrackBeacon'
@@ -68,16 +69,9 @@ export default async function EventDetailPage({
   const priceLabel = event.is_free ? 'Free' : event.price_min ? `From $${event.price_min}` : 'See tickets for pricing'
   const provider = getTicketProvider(event.ticket_url)
   const ticketCta = provider ? (event.is_free ? 'RSVP / Details' : provider.cta) : null
-  const jsonLd = eventJsonLd(event, citySlug, city.name)
-  // Event fields (title/description/venue) come from scraped, attacker-authorable
-  // third-party listings. Raw JSON.stringify does not escape `<`, so a title like
-  // `</script><script>…` would break out of this inline script tag (stored XSS).
-  // Escape the HTML-significant characters to `\uXXXX` — still valid JSON that
-  // schema.org consumers parse identically, but inert to the HTML parser.
-  const jsonLdHtml = JSON.stringify(jsonLd)
-    .replace(/</g, '\\u003c')
-    .replace(/>/g, '\\u003e')
-    .replace(/&/g, '\\u0026')
+  // schema.org Event JSON-LD (built + HTML-escaped in lib/jsonLd) so this
+  // listing is eligible for Google's event rich results.
+  const jsonLdMarkup = jsonLdHtml(singleEventJsonLd(event, citySlug, city))
   // Personalization is Austin-only at launch; only then do we log view/clickout.
   const recsOn = isRecsCity(citySlug)
   // Cross-source provenance: the distinct other sources that also listed this
@@ -87,7 +81,7 @@ export default async function EventDetailPage({
 
   return (
     <div className="min-h-screen bg-background">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdHtml }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdMarkup }} />
       {recsOn && <TrackBeacon eventId={event.id} city={citySlug} />}
       <header className="border-b bg-card/95 sticky top-0 z-40">
         <div className="max-w-3xl mx-auto px-4 py-3">
@@ -176,50 +170,4 @@ export default async function EventDetailPage({
       </div>
     </div>
   )
-}
-
-// schema.org Event JSON-LD so each listing is eligible for Google's event rich
-// results. The app scrapes this markup from sources but emitted none of its own
-// until now.
-function eventJsonLd(event: EnrichedEvent, citySlug: string, cityName: string): Record<string, unknown> {
-  const iso = (v: string | null) => {
-    if (!v) return undefined
-    const t = new Date(v)
-    return Number.isNaN(t.getTime()) ? undefined : t.toISOString()
-  }
-
-  const jsonLd: Record<string, unknown> = {
-    '@context': 'https://schema.org',
-    '@type': 'Event',
-    name: event.title,
-    startDate: iso(event.start_time),
-    eventStatus: 'https://schema.org/EventScheduled',
-    eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
-    url: `${getBaseUrl()}/${citySlug}/events/${event.id}`,
-  }
-
-  const endDate = iso(event.end_time)
-  if (endDate) jsonLd.endDate = endDate
-  if (event.description) jsonLd.description = event.description.slice(0, 500)
-  if (event.image_url) jsonLd.image = [event.image_url]
-
-  if (event.venue_name || event.venue_address) {
-    jsonLd.location = {
-      '@type': 'Place',
-      name: event.venue_name ?? cityName,
-      address: event.venue_address ?? cityName,
-    }
-  }
-
-  if (event.ticket_url || event.is_free || event.price_min != null) {
-    jsonLd.offers = {
-      '@type': 'Offer',
-      availability: 'https://schema.org/InStock',
-      price: event.is_free ? 0 : event.price_min ?? undefined,
-      priceCurrency: 'USD',
-      url: event.ticket_url ?? undefined,
-    }
-  }
-
-  return jsonLd
 }
