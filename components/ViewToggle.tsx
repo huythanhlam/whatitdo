@@ -22,7 +22,7 @@ export function ViewToggle() {
     if (next === 'grid') params.delete('view')
     else params.set('view', next)
     params.delete('page')
-    router.push(`${pathname}?${params.toString()}`)
+    router.push(`${pathname}?${params.toString()}`, { scroll: false })
   }
 
   const btn = (active: boolean) =>

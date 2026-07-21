@@ -25,7 +25,7 @@ export function DateFilter() {
     if (value && when !== value) params.set('when', value)
     else params.delete('when')
     setShowCustom(false)
-    router.push(`${pathname}?${params.toString()}`)
+    router.push(`${pathname}?${params.toString()}`, { scroll: false })
   }
 
   function applyCustom() {
@@ -35,7 +35,7 @@ export function DateFilter() {
     params.delete('page')
     if (fromVal) params.set('from', fromVal); else params.delete('from')
     if (toVal) params.set('to', toVal); else params.delete('to')
-    router.push(`${pathname}?${params.toString()}`)
+    router.push(`${pathname}?${params.toString()}`, { scroll: false })
   }
 
   function clearCustom() {
@@ -44,7 +44,7 @@ export function DateFilter() {
     params.delete('to')
     params.delete('page')
     setFromVal(''); setToVal(''); setShowCustom(false)
-    router.push(`${pathname}?${params.toString()}`)
+    router.push(`${pathname}?${params.toString()}`, { scroll: false })
   }
 
   const pill = (active: boolean) =>
