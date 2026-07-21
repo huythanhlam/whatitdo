@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+<defs><clipPath id="r"><rect x="2" y="2" width="60" height="60" rx="15"/></clipPath></defs>
+<rect x="2" y="2" width="60" height="60" rx="15" fill="#FBE9C5"/>
+<g clip-path="url(#r)">
+<g fill="#EA4939">
+<polygon points="32,42 71.5,35.7 67.6,23.8"/>
+<polygon points="32,42 60.3,13.7 50.2,6.4"/>
+<polygon points="32,42 38.3,2.5 25.7,2.5"/>
+<polygon points="32,42 17.7,4.7 6.8,10.9"/>
+<polygon points="32,42 -3.6,23.8 -7.5,35.7"/>
+</g>
+<path d="M19 42 A13 13 0 0 1 45 42 Z" fill="#EF9C1E"/>
+<path d="M2 49 Q32 44 62 49 L62 62 L2 62 Z" fill="#275350"/>
+</g>
+<rect x="2" y="2" width="60" height="60" rx="15" fill="none" stroke="#E7D9B8" stroke-width="1.5"/>
+</svg>

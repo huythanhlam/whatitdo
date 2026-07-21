@@ -124,6 +124,11 @@
   --color-tan-500: #A98F66;
   --color-tan-600: #8C7550;
 
+  /* Neutral dark grays — used for the dark-mode header surface (kept off the
+     teal-tinted slate ramp so the header reads as gray, not green). */
+  --color-ink-800: #262626;
+  --color-ink-900: #1B1B1B;
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);

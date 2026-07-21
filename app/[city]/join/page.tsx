@@ -139,8 +139,8 @@ export default async function JoinPage({
 
       <header className="relative border-b border-border/70">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
-          <Link href={base} className="flex items-center gap-2 shrink-0">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-base">🎉</span>
+          <Link href={base} aria-label="Whats Happenin" className="flex items-center gap-2 shrink-0">
+            <Image src="/logo-icon.svg" alt="" aria-hidden="true" width={32} height={32} className="h-8 w-8 rounded-lg" />
             <span className="font-display text-lg font-semibold tracking-tight text-foreground">Whats Happenin</span>
           </Link>
           <Link
