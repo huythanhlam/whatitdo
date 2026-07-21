@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { MedalFrame } from './rewards/MedalFrame'
-import { RewardMedal } from './RewardMedal'
+import { BadgeCard } from './rewards/BadgeCard'
 import { BADGES, GROUP_LABELS, GROUP_ORDER } from '@/lib/rewards/catalog'
 import type { RewardsSummary } from '@/lib/rewards/data'
 
@@ -60,7 +60,7 @@ export function RewardsPanel({ summary }: { summary: RewardsSummary }) {
               <h3 className="text-sm font-medium mb-3">{GROUP_LABELS[group]}</h3>
               <div className="grid grid-cols-3 gap-x-2 gap-y-4 sm:grid-cols-4 md:grid-cols-6">
                 {sorted.map(b => (
-                  <RewardMedal key={b.id} badge={b} earned={earned.has(b.id)} />
+                  <BadgeCard key={b.id} badge={b} earned={earned.has(b.id)} />
                 ))}
               </div>
             </div>
