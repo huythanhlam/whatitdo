@@ -7,6 +7,7 @@ import { listEvents, countEvents, getCityBySlug } from '@/lib/db'
 import { requireCity } from '@/lib/cities'
 import { resolveDateRange } from '@/lib/dateRanges'
 import { getSeoPage, SEO_PAGES } from '@/lib/seoPages'
+import { eventListJsonLd, jsonLdHtml } from '@/lib/jsonLd'
 import type { EnrichedEvent } from '@/lib/types'
 
 export const revalidate = 900
@@ -66,8 +67,15 @@ export default async function SeoPage({
   ;(config.categories ?? []).forEach(c => qs.append('category', c))
   if (config.isFree) qs.set('isFree', 'true')
 
+  const listJsonLd = events.length
+    ? jsonLdHtml(eventListJsonLd(events as unknown as EnrichedEvent[], city.slug, city))
+    : null
+
   return (
     <div className="min-h-screen bg-background">
+      {listJsonLd && (
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: listJsonLd }} />
+      )}
       <header className="border-b bg-card/95 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 py-3">
           <Link href={`/${city.slug}`} className="text-sm text-primary hover:underline">← All {city.name} events</Link>

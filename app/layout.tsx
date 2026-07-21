@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Onest, Unbounded } from "next/font/google";
 import { getBaseUrl } from "@/lib/site";
+import { organizationJsonLd, websiteJsonLd, jsonLdHtml } from "@/lib/jsonLd";
 import { SiteFooter } from "@/components/SiteFooter";
 import "./globals.css";
 
@@ -42,6 +43,18 @@ export const metadata: Metadata = {
     title: TITLE,
     description: DESCRIPTION,
   },
+  // Domain ownership for Google Search Console and Bing Webmaster Tools. Paste
+  // the tokens as env vars (GOOGLE_SITE_VERIFICATION / BING_SITE_VERIFICATION)
+  // and Next emits the corresponding <meta> tags; DNS-TXT verification is an
+  // alternative that needs no code. Omitted entirely when unset.
+  verification: {
+    ...(process.env.GOOGLE_SITE_VERIFICATION
+      ? { google: process.env.GOOGLE_SITE_VERIFICATION }
+      : {}),
+    ...(process.env.BING_SITE_VERIFICATION
+      ? { other: { "msvalidate.01": process.env.BING_SITE_VERIFICATION } }
+      : {}),
+  },
 };
 
 export default function RootLayout({
@@ -55,6 +68,15 @@ export default function RootLayout({
       className={`${onest.variable} ${unbounded.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        {/* Site-wide brand identity for Google (knowledge panel / sitelinks). */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: jsonLdHtml(organizationJsonLd()) }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: jsonLdHtml(websiteJsonLd()) }}
+        />
         {children}
         <SiteFooter />
       </body>
