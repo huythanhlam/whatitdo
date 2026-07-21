@@ -298,7 +298,7 @@ export default async function CityHomePage({
               <MapPin className="w-3.5 h-3.5" /> {city.name}, {city.state}
             </p>
             <h1 className="font-display text-4xl sm:text-5xl lg:text-[3.4rem] font-semibold leading-[1.05] text-foreground text-balance">
-              {city.name} events: find your next favorite thing to do
+              Your Next <span className="text-coral-500">{city.name}</span> Adventure Awaits
             </h1>
             <p className="mt-4 text-base sm:text-lg text-muted-foreground max-w-md text-balance">
               Concerts, festivals, comedy, food &amp; drink, arts, and more — aggregated daily across {city.name}.
