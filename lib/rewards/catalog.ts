@@ -226,6 +226,18 @@ export const BADGES: BadgeDef[] = [
   },
 ]
 
+// Display metadata for the badge groups, shared by the account RewardsPanel and
+// the /rewards catalog page so both render the same labels in the same order.
+export const GROUP_LABELS: Record<BadgeGroup, string> = {
+  'getting-started': 'Getting started',
+  attendance: 'Attendance',
+  'first-of-type': 'First-timer badges',
+  taste: 'Curation',
+  social: 'Sharing',
+  loyalty: 'Loyalty',
+}
+export const GROUP_ORDER: BadgeGroup[] = ['getting-started', 'attendance', 'first-of-type', 'taste', 'social', 'loyalty']
+
 export const LEVELS: Level[] = [
   { id: 'newcomer',     name: 'Newcomer',     minPoints: 0,   tier: 'slate' },
   { id: 'explorer',     name: 'Explorer',     minPoints: 40,  tier: 'bronze' },
