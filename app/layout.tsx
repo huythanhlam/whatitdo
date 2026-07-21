@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Onest, Unbounded } from "next/font/google";
 import { getBaseUrl } from "@/lib/site";
+import { SiteFooter } from "@/components/SiteFooter";
 import "./globals.css";
 
 // Warm, rounded grotesk for body/UI text — a distinctive Inter alternative
@@ -53,7 +54,10 @@ export default function RootLayout({
       lang="en"
       className={`${onest.variable} ${unbounded.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <SiteFooter />
+      </body>
     </html>
   );
 }
