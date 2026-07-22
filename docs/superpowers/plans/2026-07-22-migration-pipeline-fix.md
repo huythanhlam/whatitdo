@@ -276,7 +276,7 @@ Expected: prints the PR URL.
 
 The agent has no production access. After this PR merges to `main`:
 
-1. From a checkout of `main`, **read-only verify:** `supabase migration list` — confirm `001`–`033` appear as "remote-only" (blank Local) and the CLI does not error.
+1. From a checkout of `main`, **read-only verify:** `supabase migration list` — confirm `001`–`033` appear as "remote-only" (blank Local) and the CLI does not error. Also confirm `034`–`037` show as applied on **both** Local and Remote (i.e. already recorded in the remote ledger) before proceeding to step 2 — if any of `034`–`037` were applied but *not* recorded remotely, `db push` would try to re-run them.
 2. **Apply:** `supabase db push` — lands `038, 039, 040, 041, 042` on prod, including the `user_badges` rewards table, the two Austin crawler sources, admin role, and the luma-ics disable.
 
 Optional immediate win (before the merge): apply the luma-ics one-liner in the SQL editor now — `UPDATE sources SET enabled = false WHERE name = 'crawl:luma-ics-austin';` — since it is idempotent and will simply be recorded by the reconcile push.

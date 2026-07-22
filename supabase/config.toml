@@ -1,6 +1,12 @@
 # Supabase CLI local stack config. `supabase start` reads this to bring up
 # Postgres + GoTrue (auth) + PostgREST locally; `supabase db reset` applies
-# supabase/migrations/* and supabase/seed.sql. See the README for the dev flow.
+# supabase/migrations/* and supabase/seed.sql.
+#
+# Caveat: supabase/migrations/ now holds only the >=034 range (the <=033 base
+# lives in supabase/migrations-legacy/, applied by the legacy runner via
+# `npm run migrate` + PGlite) — so `supabase db reset` / `supabase start` no
+# longer builds a complete schema on its own. PGlite is the supported local
+# dev/test path (see README), not `db reset`. See the README for the dev flow.
 project_id = "whatitdo"
 
 [api]

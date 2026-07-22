@@ -1,4 +1,4 @@
-// Apply supabase/migrations/*.sql to the Postgres database in DATABASE_URL.
+// Apply supabase/migrations-legacy/*.sql to the Postgres database in DATABASE_URL.
 //
 // PGlite runs the same migrations automatically at init (fresh DB each process);
 // this script is how the *shared* Supabase database gets them — run it from CI
