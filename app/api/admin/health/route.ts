@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { recentSourceRuns, getCityBySlug, type SourceRun } from '@/lib/db'
-import { requireCronAuth } from '@/lib/auth'
+import { requireAdmin } from '@/lib/auth/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,8 +28,8 @@ function evaluate(runs: SourceRun[]): { stale: boolean; consecutiveBad: number; 
 }
 
 export async function GET(req: NextRequest) {
-  const denied = requireCronAuth(req)
-  if (denied) return denied
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
 
   const citySlug = req.nextUrl.searchParams.get('city')
   if (!citySlug) return NextResponse.json({ error: 'city query param is required' }, { status: 400 })

@@ -172,6 +172,51 @@ describe('per-user isolation (RLS)', () => {
   })
 })
 
+// migration 040: is_admin is a privileged column an authenticated user must not
+// be able to grant themselves, and admin emails are promoted on signup.
+describe('admin permission (is_admin)', () => {
+  const ADMIN_ID = '33333333-3333-3333-3333-333333333333'
+  const ADMIN_EMAIL = 'huythanhlam1@gmail.com'
+
+  it('a user cannot escalate themselves to admin', async () => {
+    await actAs(USER_A, 'authenticated')
+    // is_admin is excluded from the column-level UPDATE grant, so writing it is
+    // a privilege error (not a silent RLS no-op).
+    expect(await rejects(`UPDATE profiles SET is_admin = true WHERE id = auth.uid()`)).toBe(true)
+
+    await asOwner()
+    const row = await rows<{ is_admin: boolean }>(`SELECT is_admin FROM profiles WHERE id = $1`, [USER_A])
+    expect(row[0].is_admin).toBe(false)
+  })
+
+  it('a user cannot self-insert an admin profile row', async () => {
+    await actAs(USER_A, 'authenticated')
+    // INSERT is likewise column-scoped without is_admin; forging one is rejected.
+    expect(await rejects(
+      `INSERT INTO profiles (id, is_admin) VALUES (auth.uid(), true)`
+    )).toBe(true)
+  })
+
+  it('non-admin accounts are is_admin = false by default', async () => {
+    await asOwner()
+    const rowsAB = await rows<{ is_admin: boolean }>(
+      `SELECT is_admin FROM profiles WHERE id IN ($1, $2)`, [USER_A, USER_B]
+    )
+    expect(rowsAB).toHaveLength(2)
+    expect(rowsAB.every(r => r.is_admin === false)).toBe(true)
+  })
+
+  it('an admin email is promoted to is_admin on signup', async () => {
+    // The handle_new_user trigger fires on auth.users insert and sets is_admin
+    // when the email is in the seeded admin list.
+    await asOwner()
+    await pg.exec(`INSERT INTO auth.users (id, email) VALUES ('${ADMIN_ID}', '${ADMIN_EMAIL}')`)
+    const row = await rows<{ is_admin: boolean }>(`SELECT is_admin FROM profiles WHERE id = $1`, [ADMIN_ID])
+    expect(row).toHaveLength(1)
+    expect(row[0].is_admin).toBe(true)
+  })
+})
+
 describe('public catalog (event metadata is not RLS-gated)', () => {
   it('anon can read the full events catalog', async () => {
     await actAs(null, 'anon')

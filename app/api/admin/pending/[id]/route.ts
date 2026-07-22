@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { approveEvent, rejectEvent } from '@/lib/db'
-import { requireCronAuth } from '@/lib/auth'
+import { requireAdmin } from '@/lib/auth/server'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = requireCronAuth(req)
-  if (denied) return denied
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
 
   const { id } = await params
   let body: { action?: unknown }
