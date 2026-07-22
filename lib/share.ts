@@ -13,7 +13,7 @@ export type ShareTarget = {
 // Written as a first-person "come with me" hook — it reads like a friend
 // forwarding a plan, which shares far better than a bare "Check out …".
 export function shareText(title: string): string {
-  return `Hey! I thought you might want to go to ${title} with me 🎉`
+  return `Hey! I thought you might want to go to ${title} with me`
 }
 
 // A short, catchy email subject line — the invite hook itself is too long to sit

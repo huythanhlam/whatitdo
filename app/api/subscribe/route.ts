@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
       subject: `Confirm your ${city.name} events subscription`,
       html: `
         <div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px">
-          <h2 style="color:#C1502E">Almost there! 🎉</h2>
+          <h2 style="color:#C1502E">Almost there!</h2>
           <p>You signed up for <strong>${escapeHtml(frequency)}</strong> ${escapeHtml(city.name)} events updates for: <strong>${escapeHtml(categoryLabel)}</strong>.</p>
           <p>Confirm your email to start receiving digests:</p>
           <p><a href="${escapeHtml(confirmUrl)}" style="display:inline-block;background:#C1502E;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:14px">Confirm subscription</a></p>

@@ -112,7 +112,12 @@ export default function AdminPage() {
 
       <section>
         <h2 className="font-semibold mb-3">
-          Source health {health && (health.healthy ? '✅' : `⚠️ ${health.stale.length} stale`)}
+          Source health{' '}
+          {health && (
+            health.healthy
+              ? <span className="text-success font-normal">· All healthy</span>
+              : <span className="text-destructive font-normal">· {health.stale.length} stale</span>
+          )}
         </h2>
         <div className="space-y-1 text-sm">
           {(health?.sources ?? []).map(s => (

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { Send } from 'lucide-react'
 import { SubmitForm } from '@/components/SubmitForm'
 import { requireCity } from '@/lib/cities'
 
@@ -16,7 +17,7 @@ export default async function SubmitPage({ params }: { params: Promise<{ city: s
       <div className="flex items-start justify-center pt-12 pb-20 px-4">
         <div className="w-full max-w-md">
           <div className="text-center mb-8">
-            <p className="text-4xl mb-3">📮</p>
+            <Send className="w-9 h-9 mx-auto mb-3 text-primary" aria-hidden="true" />
             <h1 className="text-2xl font-bold mb-2">Submit a {city.name} event</h1>
             <p className="text-sm text-muted-foreground">
               Paste a link to an event page, or paste the event details as text.

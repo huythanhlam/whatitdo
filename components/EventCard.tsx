@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import Image from 'next/image'
+import { Calendar, MapPin } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { FeaturedBadge } from './FeaturedBadge'
@@ -60,7 +61,7 @@ export function EventCard({ event, basePath, featured = false, featuredLabel, se
           </div>
         ) : (
           <div className="h-44 bg-gradient-to-br from-primary/10 to-muted flex items-center justify-center">
-            <span className="text-5xl">🎉</span>
+            <Calendar className="w-10 h-10 text-muted-foreground/50" aria-hidden="true" />
           </div>
         )}
 
@@ -69,19 +70,20 @@ export function EventCard({ event, basePath, featured = false, featuredLabel, se
             {event.title}
           </h3>
 
-          <p className="text-xs text-muted-foreground">
-            📅 {dateStr} · {timeStr}
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Calendar className="w-3.5 h-3.5 shrink-0" aria-hidden="true" /> {dateStr} · {timeStr}
           </p>
 
           {event.venue_name && (
-            <p className="text-xs text-muted-foreground truncate">
-              📍 {event.venue_name}
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <MapPin className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              <span className="truncate">{event.venue_name}</span>
             </p>
           )}
 
           {priceLabel && (
             <p className="text-xs font-medium text-success">
-              {event.is_free ? '🆓' : '💰'} {priceLabel}
+              {priceLabel}
             </p>
           )}
 
@@ -108,7 +110,7 @@ export function EventCard({ event, basePath, featured = false, featuredLabel, se
           title={provider && provider.name !== 'venue site' ? `Opens ${provider.name}` : 'Opens the ticket page'}
           className="mx-4 mb-4 inline-flex items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
         >
-          🎟 {ticketCta} →
+          {ticketCta} <span aria-hidden="true">→</span>
         </a>
       )}
 

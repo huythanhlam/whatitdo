@@ -2,6 +2,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
+import { Calendar, MapPin } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { getEvent as fetchEvent, getCityBySlug } from '@/lib/db'
@@ -118,11 +119,16 @@ export default async function EventDetailPage({
         <h1 className="text-2xl font-bold mb-4 text-foreground">{event.title}</h1>
 
         <div className="space-y-2 mb-6 text-sm text-muted-foreground">
-          <p>📅 {dateStr} at {timeStr}</p>
+          <p className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 shrink-0" aria-hidden="true" /> {dateStr} at {timeStr}
+          </p>
           {event.venue_name && (
-            <p>📍 {event.venue_name}{event.venue_address ? ` · ${event.venue_address}` : ''}</p>
+            <p className="flex items-center gap-2">
+              <MapPin className="w-4 h-4 shrink-0" aria-hidden="true" />
+              <span>{event.venue_name}{event.venue_address ? ` · ${event.venue_address}` : ''}</span>
+            </p>
           )}
-          <p>{event.is_free ? '🆓 Free entry' : `💰 ${priceLabel}`}</p>
+          <p>{event.is_free ? 'Free entry' : priceLabel}</p>
           <p className="text-xs text-muted-foreground">Source: {event.source}</p>
           {otherSources.length > 0 && (
             <p className="text-xs text-muted-foreground">Also listed on {otherSources.join(', ')}</p>
@@ -144,18 +150,18 @@ export default async function EventDetailPage({
                 city={citySlug}
                 className={cn(buttonVariants(), 'bg-primary hover:bg-primary/90')}
               >
-                🎟 {ticketCta} →
+                {ticketCta} <span aria-hidden="true">→</span>
               </TicketLink>
             ) : (
               <Button asChild className="bg-primary hover:bg-primary/90">
                 <a href={event.ticket_url} target="_blank" rel="noopener noreferrer">
-                  🎟 {ticketCta} →
+                  {ticketCta} <span aria-hidden="true">→</span>
                 </a>
               </Button>
             )
           )}
           <Button variant="outline" asChild>
-            <Link href={`/${citySlug}/subscribe`}>🔔 Get event alerts</Link>
+            <Link href={`/${citySlug}/subscribe`}>Get event alerts</Link>
           </Button>
           <ShareButton
             url={`${getBaseUrl()}/${citySlug}/events/${event.id}`}

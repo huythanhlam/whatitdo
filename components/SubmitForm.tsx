@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useParams } from 'next/navigation'
+import { CircleCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { trackEvent } from '@/lib/analytics'
@@ -40,7 +41,7 @@ export function SubmitForm() {
   if (status === 'success') {
     return (
       <div className="text-center py-12 space-y-3">
-        <p className="text-5xl">📮</p>
+        <CircleCheck className="w-12 h-12 mx-auto text-success" aria-hidden="true" />
         <h2 className="text-xl font-bold">Thanks!</h2>
         <p className="text-sm text-muted-foreground">{message}</p>
       </div>

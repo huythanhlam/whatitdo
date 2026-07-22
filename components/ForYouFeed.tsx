@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { Sparkles } from 'lucide-react'
 import { RecEventCard } from './RecEventCard'
 import { fetchRecommendations, type RecEvent } from '@/lib/recs/client'
 
@@ -39,7 +40,7 @@ export function ForYouFeed({ city, basePath }: { city: string; basePath: string 
   if (events.length === 0) {
     return (
       <div className="text-center py-16 text-muted-foreground">
-        <p className="text-4xl mb-3">✨</p>
+        <Sparkles className="w-10 h-10 mx-auto mb-3 text-muted-foreground/60" aria-hidden="true" />
         <p className="font-medium text-foreground">Nothing to recommend yet</p>
         <p className="text-sm mt-1">
           Browse and mark a few events you’re interested in, then check back — the more you interact, the better this gets.
