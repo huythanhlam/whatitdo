@@ -11,6 +11,7 @@ export async function GET() {
       signedIn: !!profile,
       displayName: profile?.display_name ?? null,
       onboarded: profile ? profile.onboarded_at !== null : false,
+      isAdmin: profile?.is_admin ?? false,
     },
     { headers: { 'Cache-Control': 'private, no-store' } }
   )

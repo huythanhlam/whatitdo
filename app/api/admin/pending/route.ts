@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { listPendingEvents, getCityBySlug } from '@/lib/db'
-import { requireCronAuth } from '@/lib/auth'
+import { requireAdmin } from '@/lib/auth/server'
 
 export async function GET(req: NextRequest) {
-  const denied = requireCronAuth(req)
-  if (denied) return denied
+  const auth = await requireAdmin()
+  if (auth instanceof NextResponse) return auth
 
   const citySlug = req.nextUrl.searchParams.get('city')
   if (!citySlug) return NextResponse.json({ error: 'city query param is required' }, { status: 400 })

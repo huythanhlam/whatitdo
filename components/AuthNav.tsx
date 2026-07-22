@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { User, Star, Settings, LogOut, LogIn, UserPlus } from 'lucide-react'
+import { User, Star, Settings, LogOut, LogIn, UserPlus, Shield } from 'lucide-react'
 
-type Me = { signedIn: boolean; displayName: string | null }
+type Me = { signedIn: boolean; displayName: string | null; isAdmin: boolean }
 
 // Auth-aware avatar menu for the city header. The city page is ISR-cached, so it
 // can't render per-visitor auth state server-side; this island fetches
@@ -12,7 +12,7 @@ type Me = { signedIn: boolean; displayName: string | null }
 // signed in, a person icon otherwise. Hover/click/focus opens a menu that shows
 // Sign in vs Sign out (per auth state) plus quick links into the profile.
 // Renders nothing until it knows, to avoid flashing the wrong state.
-export function AuthNav() {
+export function AuthNav({ city }: { city: string }) {
   const [me, setMe] = useState<Me | null>(null)
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -23,7 +23,7 @@ export function AuthNav() {
     fetch('/api/auth/me', { cache: 'no-store' })
       .then(r => (r.ok ? r.json() : null))
       .then(d => {
-        if (alive && d) setMe({ signedIn: !!d.signedIn, displayName: d.displayName ?? null })
+        if (alive && d) setMe({ signedIn: !!d.signedIn, displayName: d.displayName ?? null, isAdmin: !!d.isAdmin })
       })
       .catch(() => {})
     return () => {
@@ -111,6 +111,14 @@ export function AuthNav() {
               <MenuLink href="/account" icon={<Settings className="w-4 h-4" />} onSelect={() => setOpen(false)}>
                 Account settings
               </MenuLink>
+              {me.isAdmin && (
+                <>
+                  <div className="my-1 h-px bg-border" />
+                  <MenuLink href={`/${city}/admin`} icon={<Shield className="w-4 h-4" />} onSelect={() => setOpen(false)}>
+                    Admin
+                  </MenuLink>
+                </>
+              )}
               <div className="my-1 h-px bg-border" />
               <button
                 type="button"

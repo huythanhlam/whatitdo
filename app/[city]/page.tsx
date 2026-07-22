@@ -284,7 +284,7 @@ export default async function CityHomePage({
             </Link>
             {/* Auth-aware, Austin-only at launch. Client island so the ISR-cached
                 header HTML stays impersonal (see components/AuthNav.tsx). */}
-            {isRecsCity(citySlug) && <AuthNav />}
+            {isRecsCity(citySlug) && <AuthNav city={citySlug} />}
           </div>
         </div>
       </header>

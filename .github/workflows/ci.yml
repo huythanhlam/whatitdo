@@ -39,10 +39,16 @@ jobs:
   # Apply pending Supabase migrations after a merge to main, so the shared
   # Postgres schema is never behind the deployed code (PGlite migrates itself at
   # init; Postgres does not). Runs only on main — never on PRs — and only after
-  # the build passes. Requires a DATABASE_URL repo secret (the Supabase pooler
-  # connection); until it's set, the step no-ops instead of failing the run.
-  # If the pooler's cert chain trips SELF_SIGNED_CERT_IN_CHAIN, also add a
-  # DATABASE_CA_CERT repo secret (see .env.example for how to obtain it).
+  # the build passes.
+  #
+  # Two eras, two mechanisms (see the LEGACY_MIGRATION_CEILING note in
+  # lib/db/migrate.ts):
+  #   - Legacy ≤ 033 — applied by `npm run migrate` over the pooler DATABASE_URL,
+  #     tracked in the `_migrations` ledger.
+  #   - Supabase-Auth era 034+ (auth schema / roles / RLS) — applied by
+  #     `supabase db push` against the linked project, tracked in the CLI's own
+  #     `supabase_migrations.schema_migrations` history.
+  # Each step no-ops (instead of failing the run) until its secrets are set.
   migrate:
     needs: build
     if: github.ref == 'refs/heads/main'
@@ -58,7 +64,11 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Apply migrations to Supabase
+      # Legacy era (≤ 033). Requires a DATABASE_URL repo secret (the Supabase
+      # pooler connection). If the pooler's cert chain trips
+      # SELF_SIGNED_CERT_IN_CHAIN, also add a DATABASE_CA_CERT repo secret (see
+      # .env.example for how to obtain it).
+      - name: Apply legacy migrations to Supabase (≤ 033)
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DATABASE_CA_CERT: ${{ secrets.DATABASE_CA_CERT }}
@@ -66,6 +76,28 @@ jobs:
           if [ -n "$DATABASE_URL" ]; then
             npm run migrate
           else
-            echo "DATABASE_URL secret not set — skipping migrate."
+            echo "DATABASE_URL secret not set — skipping legacy migrate."
             echo "Add it under repo Settings → Secrets and variables → Actions to enable auto-migration."
+          fi
+
+      # Supabase-Auth era (034+). Installing the CLI needs no secret; the push
+      # itself is guarded on SUPABASE_ACCESS_TOKEN + SUPABASE_PROJECT_ID.
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Push Supabase-era migrations (034+) to the linked project
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+        run: |
+          if [ -n "$SUPABASE_ACCESS_TOKEN" ] && [ -n "$SUPABASE_PROJECT_ID" ]; then
+            supabase link --project-ref "$SUPABASE_PROJECT_ID"
+            supabase db push
+          else
+            echo "SUPABASE_ACCESS_TOKEN / SUPABASE_PROJECT_ID not set — skipping supabase db push."
+            echo "Add SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_ID, and SUPABASE_DB_PASSWORD under"
+            echo "repo Settings → Secrets and variables → Actions to auto-apply 034+ migrations."
           fi
