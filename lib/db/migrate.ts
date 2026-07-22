@@ -2,18 +2,23 @@ import { readFileSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import type { Db } from './driver'
 
-// The single migration runner. `supabase/migrations/*.sql` is the one source of
-// schema truth; it is applied verbatim to BOTH drivers — PGlite (at init, on a
-// fresh in-memory database each process) and Postgres (via `npm run migrate`,
-// see scripts/migrate.ts). Applied files are recorded in a `_migrations` ledger
-// so re-runs are no-ops. This replaces the hand-mirrored schema copy that used
-// to live in pglite.ts and drift from the migrations.
+// The single migration runner. `supabase/migrations-legacy/*.sql` is the one
+// source of schema truth for this runner; it is applied verbatim to BOTH
+// drivers — PGlite (at init, on a fresh in-memory database each process) and
+// Postgres (via `npm run migrate`, see scripts/migrate.ts). Applied files are
+// recorded in a `_migrations` ledger so re-runs are no-ops. This replaces the
+// hand-mirrored schema copy that used to live in pglite.ts and drift from the
+// migrations.
 //
 // Files are resolved from the project root at runtime; next.config.ts traces
-// `supabase/migrations/**` into the serverless bundle so the PGlite fallback
-// still finds them in production.
+// `supabase/migrations-legacy/**` into the serverless bundle so the PGlite
+// fallback still finds them in production.
+//
+// Legacy (≤033) migrations live here, physically separated from the
+// Supabase-CLI-managed ≥034 range so the CLI never sees duplicate version
+// prefixes (024/025). This runner + PGlite own only the legacy directory.
 function migrationsDir(): string {
-  return path.join(process.cwd(), 'supabase', 'migrations')
+  return path.join(process.cwd(), 'supabase', 'migrations-legacy')
 }
 
 // Transitional boundary. Migrations 034+ adopt Supabase Auth + RLS: they target

@@ -69,10 +69,19 @@ beforeAll(async () => {
   pg = new PGlite({ extensions: { pg_trgm } })
   await pg.exec(PREAMBLE)
 
-  // Apply the real migrations, in order, as the (superuser) owner.
-  const dir = path.join(process.cwd(), 'supabase', 'migrations')
-  for (const file of readdirSync(dir).filter(f => f.endsWith('.sql')).sort()) {
-    await pg.exec(readFileSync(path.join(dir, file), 'utf8'))
+  // Apply the real migrations, in order, as the (superuser) owner. Legacy
+  // (≤033) migrations live in supabase/migrations-legacy/; the Supabase-era
+  // (≥034) migrations in supabase/migrations/. Apply the union in version order
+  // (zero-padded numeric prefixes sort correctly across both dirs).
+  const migrationDirs = [
+    path.join(process.cwd(), 'supabase', 'migrations-legacy'),
+    path.join(process.cwd(), 'supabase', 'migrations'),
+  ]
+  const migrationFiles = migrationDirs
+    .flatMap(dir => readdirSync(dir).filter(f => f.endsWith('.sql')).map(f => ({ dir, f })))
+    .sort((a, b) => a.f.localeCompare(b.f))
+  for (const { dir, f } of migrationFiles) {
+    await pg.exec(readFileSync(path.join(dir, f), 'utf8'))
   }
 
   // Seed: two auth users (the trigger creates their profiles), a city, and a
