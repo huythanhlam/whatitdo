@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
   await removeSubscription(token)
 
   return htmlPage(
-    `<h2>Unsubscribed ✓</h2>
+    `<h2>Unsubscribed</h2>
      <p>If that subscription existed, it's been removed from the Austin events list.</p>
      <a href="/" style="color:#F17A7E">Back to events</a>`
   )

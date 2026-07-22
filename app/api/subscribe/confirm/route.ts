@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   await confirmSubscription(token)
 
   return htmlPage(
-    `<h2>You're confirmed! ✓</h2>
+    `<h2>You're confirmed!</h2>
      <p>Your subscription is active — your first digest will arrive on schedule.</p>
      <a href="/" style="color:#F17A7E">Back to events</a>`
   )

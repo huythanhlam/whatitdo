@@ -1,3 +1,4 @@
+import { SearchX } from 'lucide-react'
 import { EventCard } from './EventCard'
 import type { EnrichedEvent } from '@/lib/types'
 
@@ -5,7 +6,7 @@ export function EventGrid({ events, basePath }: { events: EnrichedEvent[]; baseP
   if (events.length === 0) {
     return (
       <div className="text-center py-20 text-muted-foreground">
-        <p className="text-4xl mb-4">🔍</p>
+        <SearchX className="w-10 h-10 mx-auto mb-4 text-muted-foreground/60" aria-hidden="true" />
         <p className="font-medium">No events found</p>
         <p className="text-sm">Try a different search or remove some filters</p>
       </div>

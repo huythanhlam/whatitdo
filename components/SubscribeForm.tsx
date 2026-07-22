@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { MailCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -52,7 +53,7 @@ export function SubscribeForm({ neighborhoods = [] }: { neighborhoods?: string[]
   if (status === 'success') {
     return (
       <div className="text-center py-12 space-y-3">
-        <p className="text-5xl">📬</p>
+        <MailCheck className="w-12 h-12 mx-auto text-primary" aria-hidden="true" />
         <h2 className="text-xl font-bold">Almost there!</h2>
         <p className="text-sm text-muted-foreground">Check your inbox and confirm your email — your first digest arrives after that.</p>
         <Link href={`/${city}`} className="block mt-4 text-sm text-primary hover:underline">Browse events now →</Link>

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { MailCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { createClient } from '@/lib/supabase/browser'
@@ -27,7 +28,7 @@ export function ForgotPasswordForm() {
   if (status === 'sent') {
     return (
       <div className="text-center py-8 space-y-3">
-        <p className="text-5xl">📬</p>
+        <MailCheck className="w-12 h-12 mx-auto text-primary" aria-hidden="true" />
         <h2 className="text-xl font-bold">Check your inbox</h2>
         <p className="text-sm text-muted-foreground">
           If an account exists for <strong>{email}</strong>, we emailed a link to reset your password.

@@ -29,7 +29,7 @@ export function BadgeCard({ badge, earned }: { badge: BadgeDef; earned: boolean 
           </p>
           <p className="text-xs text-muted-foreground">
             {badge.points} pts
-            {earned && <span className="ml-1 font-medium text-primary">· Earned ✓</span>}
+            {earned && <span className="ml-1 font-medium text-primary">· Earned</span>}
           </p>
         </div>
       }
