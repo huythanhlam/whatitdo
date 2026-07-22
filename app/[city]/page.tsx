@@ -16,6 +16,7 @@ import { RecRail } from '@/components/RecRail'
 import { InteractionProvider } from '@/components/InteractionProvider'
 import { RewardsProvider } from '@/components/RewardsProvider'
 import { AuthNav } from '@/components/AuthNav'
+import { MobileNav } from '@/components/MobileNav'
 import { getUser } from '@/lib/auth/server'
 import { BackToTopButton } from '@/components/BackToTopButton'
 import { HeaderHeightSync } from '@/components/HeaderHeightSync'
@@ -254,23 +255,30 @@ export default async function CityHomePage({
               Whats Happenin
             </span>
           </Link>
+          {/* Mobile hamburger — sits on the logo's row (order-2 + ml-auto) and
+              folds in Submit / Get Updates / auth so those never wrap to a second
+              line. Hidden at sm+, where the full cluster below fits inline. */}
+          <div className="order-2 ml-auto sm:hidden">
+            <MobileNav base={base} showAuth={isRecsCity(citySlug)} />
+          </div>
           {/* Search — reduced width; wraps to its own full-width row on mobile. */}
           <div className="order-3 w-full sm:order-none sm:w-56 md:w-72">
             <Suspense fallback={<div className="h-9 bg-muted rounded-md animate-pulse" />}>
               <SearchBar />
             </Suspense>
           </div>
-          {/* Right cluster — pushed to the right edge, leaving empty space to its left. */}
-          <div className="order-2 sm:order-none ml-auto flex items-center gap-2 sm:gap-4 shrink-0">
+          {/* Right cluster (sm+ only) — pushed to the right edge. On mobile these
+              same actions live in the hamburger menu above. */}
+          <div className="order-2 sm:order-none ml-auto hidden sm:flex items-center gap-2 sm:gap-4 shrink-0">
             <Link
               href={`${base}/submit`}
-              className="hidden sm:inline shrink-0 text-sm text-muted-foreground hover:text-primary font-medium"
+              className="shrink-0 text-sm text-muted-foreground hover:text-primary font-medium"
             >
               Submit an event
             </Link>
             <Link
               href={`${base}/subscribe`}
-              className="shrink-0 text-sm bg-primary text-primary-foreground px-3.5 py-2 sm:px-4 rounded-full hover:bg-primary/90 transition-colors font-semibold"
+              className="shrink-0 text-sm bg-primary text-primary-foreground px-4 py-2 rounded-full hover:bg-primary/90 transition-colors font-semibold"
             >
               Get Updates
             </Link>

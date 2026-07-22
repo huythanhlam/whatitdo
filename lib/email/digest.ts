@@ -35,7 +35,7 @@ function buildDigestHtml(events: EventWithCats[], unsubscribeUrl: string, dateLa
       weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
     })
     const cats = escapeHtml((e.categories ?? []).map(c => c.name).join(', '))
-    const priceLabel = e.is_free ? '🆓 Free' : e.price_min ? `$${escapeHtml(e.price_min)}` : ''
+    const priceLabel = e.is_free ? 'Free' : e.price_min ? `$${escapeHtml(e.price_min)}` : ''
     const image = safeUrl(e.image_url)
     const ticket = safeUrl(e.ticket_url)
     return `
@@ -43,8 +43,8 @@ function buildDigestHtml(events: EventWithCats[], unsubscribeUrl: string, dateLa
         ${image ? `<img src="${image}" alt="" style="width:100%;height:120px;object-fit:cover;border-radius:4px;margin-bottom:12px">` : ''}
         ${cats ? `<p style="font-size:11px;color:#C1502E;margin:0 0 4px;text-transform:uppercase;letter-spacing:0.05em">${cats}</p>` : ''}
         <h3 style="margin:0 0 6px;font-size:16px;color:#2A1D15">${escapeHtml(e.title)}</h3>
-        <p style="margin:0 0 4px;font-size:13px;color:#6E5138">📅 ${escapeHtml(date)}</p>
-        ${e.venue_name ? `<p style="margin:0 0 8px;font-size:13px;color:#6E5138">📍 ${escapeHtml(e.venue_name)}</p>` : ''}
+        <p style="margin:0 0 4px;font-size:13px;color:#6E5138">${escapeHtml(date)}</p>
+        ${e.venue_name ? `<p style="margin:0 0 8px;font-size:13px;color:#6E5138">${escapeHtml(e.venue_name)}</p>` : ''}
         ${priceLabel ? `<p style="margin:0 0 8px;font-size:13px;color:#647353">${priceLabel}</p>` : ''}
         ${ticket ? `<a href="${ticket}" style="display:inline-block;background:#C1502E;color:white;padding:8px 16px;border-radius:6px;text-decoration:none;font-size:13px">View event →</a>` : ''}
       </div>

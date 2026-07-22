@@ -166,6 +166,18 @@ body {
   font-family: var(--font-sans), sans-serif;
 }
 
+/* Keyboard-visible focus ring for links. shadcn buttons/inputs manage their own
+   focus-visible ring; plain links (event cards, ticket CTAs, nav, category
+   chips) relied on the browser default, which is easy to lose against the
+   colored surfaces. Only :focus-visible — mouse clicks stay ring-free. */
+@layer base {
+  a:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 0.25rem;
+  }
+}
+
 /* Hide scrollbars on horizontally-scrolling carousels (category strip, hero
    rail) while keeping native touch/trackpad scroll and keyboard focus. */
 @layer utilities {

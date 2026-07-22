@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import type { Metadata } from 'next'
+import { Mail } from 'lucide-react'
 import { SubscribeForm } from '@/components/SubscribeForm'
 import { requireCity } from '@/lib/cities'
 import { getDistinctNeighborhoods } from '@/lib/db'
@@ -52,7 +53,7 @@ export default async function SubscribePage({ params }: { params: Promise<{ city
       <div className="flex items-start justify-center pt-12 pb-20 px-4">
         <div className="w-full max-w-md">
           <div className="text-center mb-8">
-            <p className="text-4xl mb-3">📬</p>
+            <Mail className="w-9 h-9 mx-auto mb-3 text-primary" aria-hidden="true" />
             <h1 className="text-2xl font-bold mb-2">Get {city.name} events in your inbox</h1>
             <p className="text-sm text-muted-foreground">
               We scan the web daily and send you a curated digest of {city.name} events.

@@ -3,7 +3,7 @@ import { Suspense } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { redirect } from 'next/navigation'
-import { MapPin, ArrowLeft, Bookmark, Sparkles, CalendarHeart, Check } from 'lucide-react'
+import { MapPin, ArrowLeft, Bookmark, Sparkles, CalendarHeart, Check, Calendar } from 'lucide-react'
 import { SignUpForm } from '@/components/SignUpForm'
 import { getUser } from '@/lib/auth/server'
 import { requireCity } from '@/lib/cities'
@@ -61,8 +61,8 @@ function PreviewCard({ event }: { event: EnrichedEvent }) {
         {event.image_url ? (
           <Image src={event.image_url} alt="" fill sizes="56px" className="object-cover" />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-lg" style={{ background: 'var(--color-slate-100)' }}>
-            🎟️
+          <div className="flex h-full w-full items-center justify-center" style={{ background: 'var(--color-slate-100)' }}>
+            <Calendar className="w-5 h-5 text-slate-400" aria-hidden="true" />
           </div>
         )}
       </div>
