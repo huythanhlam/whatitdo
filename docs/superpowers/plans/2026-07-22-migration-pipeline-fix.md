@@ -272,11 +272,23 @@ Expected: prints the PR URL.
 
 ---
 
-## Post-merge manual step (user, not the agent)
+## Post-merge: the CI job applies it automatically
 
-The agent has no production access. After this PR merges to `main`:
+The apply step is **not manual** — `.github/workflows/ci.yml`'s `migrate` job runs on every push to `main` and already executes `supabase db push` in its "Push Supabase-era migrations (034+)" step (secrets `SUPABASE_ACCESS_TOKEN` / `SUPABASE_PROJECT_ID` / `SUPABASE_DB_PASSWORD` are set). That step is exactly what has been failing, with:
 
-1. From a checkout of `main`, **read-only verify:** `supabase migration list` — confirm `001`–`033` appear as "remote-only" (blank Local) and the CLI does not error. Also confirm `034`–`037` show as applied on **both** Local and Remote (i.e. already recorded in the remote ledger) before proceeding to step 2 — if any of `034`–`037` were applied but *not* recorded remotely, `db push` would try to re-run them.
-2. **Apply:** `supabase db push` — lands `038, 039, 040, 041, 042` on prod, including the `user_badges` rewards table, the two Austin crawler sources, admin role, and the luma-ics disable.
+```
+Found local migration files to be inserted before the last migration on remote database.
+  supabase/migrations/024_luma.sql
+  supabase/migrations/025_fix_partiful_image_urls.sql
+  supabase/migrations/025_meanwhile_dedicated_parser.sql
+```
 
-Optional immediate win (before the merge): apply the luma-ics one-liner in the SQL editor now — `UPDATE sources SET enabled = false WHERE name = 'crawl:luma-ics-austin';` — since it is idempotent and will simply be recorded by the reconcile push.
+This PR moves those phantom files out of `supabase/migrations/`, so when the `migrate` job re-runs on the merge commit, `supabase db push` sees a clean unique `034`–`042` sequence and applies `038, 039, 040, 041, 042` (all after remote's max `037`). No `--include-all`, no re-running SQL.
+
+Compatibility with the CI job is preserved: its earlier "Apply legacy migrations (≤ 033)" step runs `npm run migrate`, which this PR repointed to `supabase/migrations-legacy/` — so it still applies the `≤033` set (already recorded in the `_migrations` ledger → no-ops).
+
+**Maintainer actions:**
+1. **Optional pre-check (read-only):** `supabase migration list` — confirm `034`–`037` show applied on **both** Local and Remote (they did in the last check), so the push won't try to re-run them. `001`–`033` showing as "remote-only" is expected and harmless.
+2. **After merge:** watch the `migrate` job on the merge-to-`main` run; the "Push Supabase-era migrations (034+)" step should now go green and land the `user_badges` rewards table, the two Austin crawler sources, admin role, and the luma-ics disable.
+
+Optional immediate win (before the merge): apply the luma-ics one-liner in the SQL editor now — `UPDATE sources SET enabled = false WHERE name = 'crawl:luma-ics-austin';` — since it is idempotent and the CI push will simply record it.
