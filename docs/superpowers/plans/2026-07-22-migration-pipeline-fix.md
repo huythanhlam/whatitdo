@@ -308,4 +308,15 @@ Verified on 2026-07-22: `db push` does **not** tolerate this divergence. The rem
 
 This is genuinely one-time; after the revert, future pushes deal only with the unique `034+` range and need no intervention.
 
+### Rollout note (2026-07-23): `040_admin_role` schema drift
+
+After the ledger reconcile, the push applied `038` and `039` but aborted on `040_admin_role.sql`:
+
+```
+ERROR: column "is_admin" of relation "profiles" already exists (SQLSTATE 42701)
+At statement: 0 — ALTER TABLE profiles ADD COLUMN is_admin ...
+```
+
+The `is_admin` column was already present on the production project (added out of band and never recorded in `schema_migrations`). A follow-up PR guards the add with `ADD COLUMN IF NOT EXISTS`; the rest of `040` (REVOKE/GRANT, seed `UPDATE`, `CREATE OR REPLACE FUNCTION`) is already idempotent, so the migration is now safely re-runnable and converges regardless of pre-existing state. `038`/`039` were applied and recorded by the aborted push, so the retry only applies `040, 041, 042`.
+
 Optional immediate win (before the merge): apply the luma-ics one-liner in the SQL editor now — `UPDATE sources SET enabled = false WHERE name = 'crawl:luma-ics-austin';` — since it is idempotent and the CI push will simply record it.

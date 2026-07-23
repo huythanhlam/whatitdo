@@ -8,7 +8,14 @@
 -- edits BOTH lists below (the seed UPDATE and the handle_new_user trigger) so
 -- they never drift — that is the whole source of truth for who is an admin.
 
-ALTER TABLE profiles ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT false;
+-- IF NOT EXISTS: on the production project this column was already added out of
+-- band (applied manually/before the CLI push pipeline worked) but never recorded
+-- in schema_migrations, so a plain ADD COLUMN aborts the push with "column
+-- is_admin already exists". Guarding it lets db push apply-and-record this
+-- migration whether or not the column is already present; the rest of the file
+-- (REVOKE/GRANT, the seed UPDATE, CREATE OR REPLACE FUNCTION) is already
+-- idempotent, so the whole migration is now safely re-runnable and convergent.
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT false;
 
 -- Prevent privilege self-escalation. Migration 035 granted table-wide
 -- INSERT/UPDATE on profiles to `authenticated`, and the "own profile" policy is
