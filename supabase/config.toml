@@ -50,3 +50,17 @@ enable_signup = true
 # immediately, so the default flow sends no email (keeps email cost/quota down).
 enable_confirmations = false
 double_confirm_changes = true
+
+# Google OAuth ("Continue with Google"). Local dev only — production configures
+# the same provider in the Supabase dashboard (Authentication → Providers →
+# Google), NOT from this file. Fill the two env vars in .env.example, then the
+# secrets are read from the shell `supabase start` runs in (never committed).
+# See the README / Supabase docs for the Google Cloud Console OAuth-client and
+# authorized-redirect-URI setup.
+[auth.external.google]
+enabled = true
+client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET)"
+# Supabase's own callback (…/auth/v1/callback) receives Google's redirect; it
+# then bounces to our app's /auth/callback (allow-listed above).
+skip_nonce_check = false
