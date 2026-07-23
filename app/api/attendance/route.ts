@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { checkBotId } from 'botid/server'
 import { checkRateLimit, clientIp } from '@/lib/rateLimit'
 import { getCityBySlug } from '@/lib/db'
 import { isRecsCity } from '@/lib/recs/config'
@@ -18,6 +19,11 @@ const ATT_WINDOW_MS = 60 * 1000
 const NO_STORE = { 'Cache-Control': 'private, no-store' }
 
 export async function POST(req: NextRequest) {
+  // Check-ins grant rewards; block automated farming before doing any work.
+  if ((await checkBotId()).isBot) {
+    return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+  }
+
   if (!checkRateLimit(`att:${clientIp(req)}`, ATT_MAX, ATT_WINDOW_MS)) {
     return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
   }

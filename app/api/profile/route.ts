@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { checkBotId } from 'botid/server'
 import { getCityBySlug, getDistinctNeighborhoods } from '@/lib/db'
 import { getUser } from '@/lib/auth/server'
 import { createServiceClient } from '@/lib/supabase/service'
@@ -22,6 +23,15 @@ import { surveyToAffinityKeys, surveyToInterestRows, type SurveyPrefs } from '@/
 
 const RECS_CITY = 'austin'
 const NO_STORE = { 'Cache-Control': 'private, no-store' }
+
+// BotID gate for the mutating handlers (PATCH/POST/DELETE — protected in
+// instrumentation-client.ts). GET is a read and stays open. Returns a 403
+// response to short-circuit with, or null to proceed.
+async function botBlocked(): Promise<NextResponse | null> {
+  return (await checkBotId()).isBot
+    ? NextResponse.json({ error: 'Access denied' }, { status: 403, headers: NO_STORE })
+    : null
+}
 
 function groupInterests(rows: { kind: string; value: string }[]): SurveyPrefs {
   return {
@@ -66,6 +76,8 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
+  const denied = await botBlocked()
+  if (denied) return denied
   const { supabase, user } = await getUser()
   if (!user) return NextResponse.json({ error: 'Not signed in' }, { status: 401, headers: NO_STORE })
 
@@ -93,6 +105,8 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const denied = await botBlocked()
+  if (denied) return denied
   const { supabase, user } = await getUser()
   if (!user) return NextResponse.json({ error: 'Not signed in' }, { status: 401, headers: NO_STORE })
 
@@ -115,6 +129,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE() {
+  const denied = await botBlocked()
+  if (denied) return denied
   const { user } = await getUser()
   if (!user) return NextResponse.json({ error: 'Not signed in' }, { status: 401, headers: NO_STORE })
   // Deleting the auth user cascades profile + all behavioral rows (FKs). Requires

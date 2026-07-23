@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { checkBotId } from 'botid/server'
 import { resolvePage, extractAndPersist, InputError } from '@/lib/submissions'
 import { getCityBySlug } from '@/lib/db'
 import { checkRateLimit, clientIp } from '@/lib/rateLimit'
@@ -16,6 +17,12 @@ const SUBMIT_WINDOW_MS = 60 * 60 * 1000
 // `pending` (never auto-published) for review at /[city]/admin. SSRF-guarded
 // exactly like /api/import via lib/submissions.ts's shared resolvePage().
 export async function POST(req: NextRequest) {
+  // Bot gate before the per-IP limit: extraction hits the shared Gemini budget,
+  // so keep automated floods off it even when they stay under the rate cap.
+  if ((await checkBotId()).isBot) {
+    return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+  }
+
   if (!checkRateLimit(`submissions:${clientIp(req)}`, SUBMIT_MAX, SUBMIT_WINDOW_MS)) {
     return NextResponse.json({ error: 'Too many submissions from this address — please try again later.' }, { status: 429 })
   }
