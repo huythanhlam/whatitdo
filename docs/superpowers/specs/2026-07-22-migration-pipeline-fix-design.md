@@ -91,15 +91,22 @@ the dir), so it is covered automatically by change #3 — no edit needed.
 
 The agent cannot reach prod. After the code changes land:
 
-1. **Verify gate (read-only):** `supabase migration list` — confirm the CLI shows
-   `001`–`033` as harmless "remote-only" rows and does **not** error on divergence.
-   This is the one Supabase CLI behavior not testable from the repo. If it does
-   object, fall back to marking the now-fileless `001`–`033` appropriately (e.g.
-   `migration repair`) — but the expectation is `db push` only pushes local→remote
-   and tolerates remote-only history.
+1. **Reconcile the remote ledger (REQUIRED).** Verified on 2026-07-22: `supabase
+   db push` does **not** tolerate remote-only history — with `001`–`033` moved out
+   of `supabase/migrations/`, it errors `Remote migration versions not found in
+   local migrations directory`. The remote CLI ledger must be told to forget
+   `001`–`033` (now owned by the legacy `_migrations` ledger):
+   ```
+   supabase migration repair --status reverted 001 002 003 004 005 006 007 008 \
+     009 010 011 012 013 014 015 016 017 018 019 020 021 022 023 024 025 026 027 \
+     028 029 030 031 032 033
+   ```
+   `--status reverted` edits ONLY `supabase_migrations.schema_migrations`; it runs
+   no down-migration and drops no schema. Remote ledger becomes `034`–`037`.
 2. **Apply:** `supabase db push` — applies `038, 039, 040, 041, 042` (everything
    after remote's max `037`) in order and records them. Lands the rewards table,
-   the two Austin crawler sources, admin role, and the luma-ics disable.
+   the two Austin crawler sources, admin role, and the luma-ics disable. In CI this
+   is the `migrate` job's push step; re-run it after the repair.
 
 ## Sequencing
 
