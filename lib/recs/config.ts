@@ -114,7 +114,7 @@ export const RECS_EXPLORE_SLOTS = 2
 
 // --- The seeded model -------------------------------------------------------
 // v1 prior weights for the logistic-regression scorer. MUST match the seed in
-// supabase/migrations/031_ml.sql (a test asserts the active DB row equals this).
+// supabase/migrations-legacy/031_ml.sql (a test asserts the active DB row equals this).
 // `embedding_sim` is present but its feature isn't computed until the embedding
 // column ships; the scorer treats an absent feature as 0.
 export type ModelWeights = {

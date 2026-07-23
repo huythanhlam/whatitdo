@@ -100,7 +100,7 @@ curl -X POST http://localhost:3000/api/subscribe \
 | `npm run build` | Production build |
 | `npm test` | Run the Vitest suite (pure fns, fixture parsers, PGlite integration) |
 | `npm run lint` | ESLint |
-| `npm run migrate` | Apply `supabase/migrations/*` to `DATABASE_URL` (prod DB) |
+| `npm run migrate` | Apply `supabase/migrations-legacy/*` to `DATABASE_URL` (prod DB) |
 | `npm run backfill-geocode` | One-off: geocode any existing venues that predate `GOOGLE_GEOCODING_API_KEY` being set |
 
 ## Going to production
@@ -119,9 +119,9 @@ curl -X POST http://localhost:3000/api/subscribe \
    npm run migrate
    ```
 
-   Runs every file in `supabase/migrations/` against `DATABASE_URL` (idempotent,
-   tracked in a `_migrations` ledger). When `DATABASE_URL` is unset the app just
-   uses PGlite and needs no migration step.
+   Runs every file in `supabase/migrations-legacy/` against `DATABASE_URL`
+   (idempotent, tracked in a `_migrations` ledger). When `DATABASE_URL` is
+   unset the app just uses PGlite and needs no migration step.
 
 ### 2. Optional keys
 
@@ -196,7 +196,7 @@ PR and on `main` (`.github/workflows/ci.yml`).
   month all live in query params, so every view is shareable and server-rendered.
 - **Catalog query layer** — `lib/db` runs raw SQL over a `Db` driver seam: a `pg`
   Pool (Supabase Postgres) in prod, embedded PGlite for zero-config local catalog
-  dev/tests. The same `supabase/migrations/*` are the single schema truth.
+  dev/tests. The same `supabase/migrations-legacy/*` are the single schema truth.
 - **Auth + user-private data** — Supabase Auth with per-user Row Level Security.
   Email + password is the default sign-in/sign-up (no email sent); passwordless
   magic-link login is a per-account opt-in (`profiles.magic_link_enabled`),

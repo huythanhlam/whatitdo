@@ -6,10 +6,11 @@ const nextConfig: NextConfig = {
   // it loads via Node's native resolution. `pg` (the prod Postgres driver) also
   // has native/dynamic internals best left unbundled. One is used per deployment.
   serverExternalPackages: ['@electric-sql/pglite', 'pg'],
-  // The migration runner reads supabase/migrations/*.sql at runtime; trace them
-  // into the serverless bundle so the PGlite fallback finds them in production.
+  // The migration runner reads supabase/migrations-legacy/*.sql at runtime;
+  // trace them (and the Supabase-CLI-managed dir) into the serverless bundle so
+  // the PGlite fallback finds them in production.
   outputFileTracingIncludes: {
-    '/*': ['supabase/migrations/**/*'],
+    '/*': ['supabase/migrations/**/*', 'supabase/migrations-legacy/**/*'],
   },
   images: {
     // Event images come from many third-party hosts (ticketing platforms,
