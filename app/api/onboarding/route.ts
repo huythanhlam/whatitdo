@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { checkBotId } from 'botid/server'
 import { getCityBySlug, getDistinctNeighborhoods } from '@/lib/db'
 import { getUser } from '@/lib/auth/server'
 import { setUserInterests, setExplicitAffinities, markOnboarded } from '@/lib/user/data'
@@ -15,6 +16,10 @@ const RECS_CITY = 'austin'
 const NO_STORE = { 'Cache-Control': 'private, no-store' }
 
 export async function POST(req: NextRequest) {
+  if ((await checkBotId()).isBot) {
+    return NextResponse.json({ error: 'Access denied' }, { status: 403, headers: NO_STORE })
+  }
+
   const { supabase, user } = await getUser()
   if (!user) return NextResponse.json({ error: 'Not signed in' }, { status: 401, headers: NO_STORE })
 

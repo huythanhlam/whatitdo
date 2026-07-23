@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { checkBotId } from 'botid/server'
 import { Resend } from 'resend'
 import { CATEGORY_SLUGS } from '@/lib/categories'
 import { addSubscription, getCityBySlug, getDistinctNeighborhoods } from '@/lib/db'
@@ -17,6 +18,12 @@ const SUBSCRIBE_MAX = 5
 const SUBSCRIBE_WINDOW_MS = 60 * 60 * 1000
 
 export async function POST(req: NextRequest) {
+  // Bot gate before the per-IP limit: stops distributed automation that stays
+  // under the rate cap from using this as an open mailer.
+  if ((await checkBotId()).isBot) {
+    return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+  }
+
   if (!checkRateLimit(`subscribe:${clientIp(req)}`, SUBSCRIBE_MAX, SUBSCRIBE_WINDOW_MS)) {
     return NextResponse.json({ error: 'Too many subscription attempts from this address — please try again later.' }, { status: 429 })
   }

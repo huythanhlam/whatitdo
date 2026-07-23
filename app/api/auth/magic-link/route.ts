@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { checkBotId } from 'botid/server'
 import { createServiceClient } from '@/lib/supabase/service'
 
 // Gated passwordless sign-in. Magic link is a per-account opt-in (default off),
@@ -12,6 +13,13 @@ import { createServiceClient } from '@/lib/supabase/service'
 const NO_STORE = { 'Cache-Control': 'private, no-store' }
 
 export async function POST(req: NextRequest) {
+  // Bots are the email-bomb threat here. Skip the send but return the SAME
+  // neutral response so this stays indistinguishable from every other outcome
+  // (never reveals bot-ness, account existence, or opt-in state).
+  if ((await checkBotId()).isBot) {
+    return NextResponse.json({ ok: true }, { headers: NO_STORE })
+  }
+
   let body: { email?: unknown; redirect?: unknown }
   try {
     body = await req.json()

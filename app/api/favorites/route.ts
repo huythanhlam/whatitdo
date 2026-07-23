@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { checkBotId } from 'botid/server'
 import { checkRateLimit, clientIp } from '@/lib/rateLimit'
 import { getCityBySlug } from '@/lib/db'
 import { isRecsCity } from '@/lib/recs/config'
@@ -18,6 +19,11 @@ type Action = 'interested' | 'uninterested' | 'hide'
 const NO_STORE = { 'Cache-Control': 'private, no-store' }
 
 export async function POST(req: NextRequest) {
+  // Saves feed affinity + rewards thresholds; block automated farming up front.
+  if ((await checkBotId()).isBot) {
+    return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+  }
+
   if (!checkRateLimit(`fav:${clientIp(req)}`, FAV_MAX, FAV_WINDOW_MS)) {
     return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
   }

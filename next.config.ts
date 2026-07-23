@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withBotId } from "botid/next/config";
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
@@ -45,4 +46,8 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Wrap with BotID: injects proxy rewrites so the bot-protection challenge is
+// served first-party (ad-blockers / third-party script blockers can't defeat
+// it). Client-side protection lives in instrumentation-client.ts; server routes
+// enforce with checkBotId().
+export default withBotId(nextConfig);
