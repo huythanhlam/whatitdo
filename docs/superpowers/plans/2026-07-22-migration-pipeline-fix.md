@@ -283,12 +283,40 @@ Found local migration files to be inserted before the last migration on remote d
   supabase/migrations/025_meanwhile_dedicated_parser.sql
 ```
 
-This PR moves those phantom files out of `supabase/migrations/`, so when the `migrate` job re-runs on the merge commit, `supabase db push` sees a clean unique `034`–`042` sequence and applies `038, 039, 040, 041, 042` (all after remote's max `037`). No `--include-all`, no re-running SQL.
+This PR moves those phantom files out of `supabase/migrations/`, so `supabase db push` no longer hits the duplicate-prefix error. Applied migrations `038, 039, 040, 041, 042` are all after remote's max `037`, so once the ledger is reconciled (below) they apply with no `--include-all` and no re-running SQL.
 
 Compatibility with the CI job is preserved: its earlier "Apply legacy migrations (≤ 033)" step runs `npm run migrate`, which this PR repointed to `supabase/migrations-legacy/` — so it still applies the `≤033` set (already recorded in the `_migrations` ledger → no-ops).
 
-**Maintainer actions:**
-1. **Optional pre-check (read-only):** `supabase migration list` — confirm `034`–`037` show applied on **both** Local and Remote (they did in the last check), so the push won't try to re-run them. `001`–`033` showing as "remote-only" is expected and harmless.
-2. **After merge:** watch the `migrate` job on the merge-to-`main` run; the "Push Supabase-era migrations (034+)" step should now go green and land the `user_badges` rewards table, the two Austin crawler sources, admin role, and the luma-ics disable.
+### REQUIRED one-time ledger reconcile
+
+Moving `001`–`033` out of `supabase/migrations/` leaves the remote `supabase_migrations.schema_migrations` ledger holding versions the local dir no longer has, so `supabase db push` fails with:
+
+```
+Remote migration versions not found in local migrations directory.
+```
+
+Verified on 2026-07-22: `db push` does **not** tolerate this divergence. The remote CLI ledger must be told to forget `001`–`033` (they are now owned by the legacy `_migrations` ledger). `supabase migration repair --status reverted` edits ONLY the bookkeeping table — it runs no down-migration and drops no schema; the `001`–`033` objects are untouched.
+
+**Maintainer steps (one-time):**
+1. **Merge this PR** so `main`'s `supabase/migrations/` is the clean `034`–`042` set. (The CI push it triggers fails once more with the divergence error above — harmless, applies nothing.)
+2. **Reconcile the remote ledger**, from a prod-linked checkout:
+   ```bash
+   supabase migration repair --status reverted 001 002 003 004 005 006 007 008 009 010 011 012 013 014 015 016 017 018 019 020 021 022 023 024 025 026 027 028 029 030 031 032 033
+   ```
+   Remote ledger becomes `034`–`037`, matching local `034`–`037`.
+3. **Re-run the failed `migrate` job** (Actions → the run → "Re-run failed jobs"). `db push` now applies `038, 039, 040, 041, 042` — the `user_badges` rewards table, the two Austin crawler sources, admin role, and the luma-ics disable.
+
+This is genuinely one-time; after the revert, future pushes deal only with the unique `034+` range and need no intervention.
+
+### Rollout note (2026-07-23): `040_admin_role` schema drift
+
+After the ledger reconcile, the push applied `038` and `039` but aborted on `040_admin_role.sql`:
+
+```
+ERROR: column "is_admin" of relation "profiles" already exists (SQLSTATE 42701)
+At statement: 0 — ALTER TABLE profiles ADD COLUMN is_admin ...
+```
+
+The `is_admin` column was already present on the production project (added out of band and never recorded in `schema_migrations`). A follow-up PR guards the add with `ADD COLUMN IF NOT EXISTS`; the rest of `040` (REVOKE/GRANT, seed `UPDATE`, `CREATE OR REPLACE FUNCTION`) is already idempotent, so the migration is now safely re-runnable and converges regardless of pre-existing state. `038`/`039` were applied and recorded by the aborted push, so the retry only applies `040, 041, 042`.
 
 Optional immediate win (before the merge): apply the luma-ics one-liner in the SQL editor now — `UPDATE sources SET enabled = false WHERE name = 'crawl:luma-ics-austin';` — since it is idempotent and the CI push will simply record it.
