@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation'
 import { MailCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { GoogleSignInButton } from '@/components/GoogleSignInButton'
 import { createClient } from '@/lib/supabase/browser'
 
 // Password-first sign-in via Supabase Auth. Email + password is the default (no
@@ -119,12 +120,22 @@ export function SignInForm({ redirectTo }: { redirectTo?: string }) {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4">
+    <div className="space-y-4">
       {linkError && (
         <p className="text-sm text-destructive">
           That sign-in link was invalid or expired. Sign in with your password below.
         </p>
       )}
+      <GoogleSignInButton redirect={redirect} />
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-background px-2 text-muted-foreground">or</span>
+        </div>
+      </div>
+      <form onSubmit={submit} className="space-y-4">
       <div>
         <label className="block text-sm font-medium mb-1" htmlFor="email">Email</label>
         <Input
@@ -171,6 +182,7 @@ export function SignInForm({ redirectTo }: { redirectTo?: string }) {
       >
         Email me a sign-in link instead
       </button>
-    </form>
+      </form>
+    </div>
   )
 }

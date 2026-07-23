@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { GoogleSignInButton } from '@/components/GoogleSignInButton'
 import { createClient } from '@/lib/supabase/browser'
 import { trackEvent } from '@/lib/analytics'
 
@@ -63,7 +64,17 @@ export function SignUpForm({ redirectTo }: { redirectTo?: string }) {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4">
+    <div className="space-y-4">
+      <GoogleSignInButton redirect={redirect} />
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-background px-2 text-muted-foreground">or</span>
+        </div>
+      </div>
+      <form onSubmit={submit} className="space-y-4">
       <div>
         <label className="block text-sm font-medium mb-1" htmlFor="email">Email</label>
         <Input
@@ -114,6 +125,7 @@ export function SignUpForm({ redirectTo }: { redirectTo?: string }) {
         Already have an account?{' '}
         <Link href={signinHref} className="text-primary hover:underline font-medium">Sign in</Link>
       </p>
-    </form>
+      </form>
+    </div>
   )
 }
